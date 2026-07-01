@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>flue-guard · audit viewer</title>
+<style>
+  :root {
+    --bg: #0b1020; --panel: #121a2e; --line: #243049; --ink: #e6ecf5;
+    --mut: #8da2c0; --ok: #16a34a; --okbg: #0f2a1b; --bad: #ef4444;
+    --badbg: #2a1212; --accent: #38bdf8; --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  }
+  header { padding: 24px 28px 8px; }
+  h1 { margin: 0; font-size: 20px; }
+  h1 .lib { color: var(--accent); font-family: var(--mono); }
+  .sub { color: var(--mut); margin: 4px 0 0; font-size: 13px; }
+  main { padding: 16px 28px 48px; max-width: 1100px; }
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 14px 16px; margin-bottom: 18px;
+  }
+  .controls label { color: var(--mut); font-size: 13px; }
+  input[type=text], input[type=file] { color: var(--ink); }
+  input[type=text] {
+    background: #0a1020; border: 1px solid var(--line); border-radius: 7px;
+    padding: 7px 10px; font-family: var(--mono); font-size: 13px; min-width: 220px;
+  }
+  button {
+    background: var(--accent); color: #042b3a; border: 0; border-radius: 7px;
+    padding: 8px 14px; font-weight: 600; cursor: pointer;
+  }
+  button.ghost { background: transparent; color: var(--mut); border: 1px solid var(--line); }
+  textarea {
+    width: 100%; min-height: 120px; background: #0a1020; color: var(--ink);
+    border: 1px solid var(--line); border-radius: 10px; padding: 12px;
+    font-family: var(--mono); font-size: 12.5px; resize: vertical;
+  }
+  .banner {
+    display: none; align-items: center; gap: 10px; padding: 14px 16px;
+    border-radius: 10px; margin: 18px 0; font-weight: 600; border: 1px solid;
+  }
+  .banner.ok { display: flex; background: var(--okbg); border-color: var(--ok); color: #bbf7d0; }
+  .banner.bad { display: flex; background: var(--badbg); border-color: var(--bad); color: #fecaca; }
+  .banner .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .banner.ok .dot { background: var(--ok); }
+  .banner.bad .dot { background: var(--bad); }
+  .banner small { font-weight: 400; opacity: .8; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--mut); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  td.seq { font-family: var(--mono); color: var(--mut); }
+  td.tool { font-family: var(--mono); }
+  tr.broken td { background: var(--badbg); }
+  tr.broken .reason { color: #fecaca; font-size: 12px; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; }
+  .pill.allow { background: #0f2a1b; color: #86efac; }
+  .pill.deny  { background: #2a1212; color: #fca5a5; }
+  .pill.defer { background: #2a230f; color: #fde68a; }
+  .pill.primitive { background: #1e2540; color: #c4b5fd; border: 1px solid #4c3f8a; }
+  .out { color: var(--mut); font-size: 12px; }
+  .hash { font-family: var(--mono); font-size: 11px; color: var(--mut); }
+  .meta { color: var(--mut); font-size: 12px; }
+  .empty { color: var(--mut); padding: 28px 0; text-align: center; }
+  footer { color: var(--mut); font-size: 12px; padding: 0 28px 32px; max-width: 1100px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="lib">flue-guard</span> · audit viewer</h1>
+  <p class="sub">Re-verifies the hash chain in your browser with Web Crypto — the
+     same algorithm the library writes with. Nothing is uploaded; it all runs locally.</p>
+</header>
+
+<main>
+  <div class="controls">
+    <label>Load <code>audit.jsonl</code>: <input type="file" id="file" accept=".jsonl,.json,.txt" /></label>
+    <label>HMAC key (optional): <input type="text" id="key" placeholder="leave blank for plain SHA-256" /></label>
+    <button id="verify">Verify chain</button>
+    <button class="ghost" id="sample">Load sample</button>
+    <button class="ghost" id="tamper" title="Flip one byte in a record to watch verification catch it">Tamper with a line</button>
+  </div>
+
+  <textarea id="input" spellcheck="false" placeholder="…or paste JSONL here (one audit entry per line)"></textarea>
+
+  <div class="banner" id="banner"><span class="dot"></span><span id="bannerText"></span></div>
+
+  <div id="tableWrap"></div>
+</main>
+
+<footer>
+  A read-only companion to
+  <a href="https://github.com/Kirylka/Articles/tree/main/flue-guard">flue-guard</a>.
+  Editing any past line and re-verifying points at the exact <code>seq</code> that breaks.
+</footer>
+
+<script type="module">
+// --- mirror of src/audit.ts, in the browser ---------------------------------
+const GENESIS_HASH = "0".repeat(64);
+
+function canonicalize(value) {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value && typeof value === "object") {
+    const sorted = {};
+    for (const k of Object.keys(value).sort()) sorted[k] = canonicalize(value[k]);
+    return sorted;
+  }
+  return value;
+}
+const toHex = (buf) =>
+  Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, "0")).join("");
+
+async function hashEntry(body, hmacKey) {
+  const data = new TextEncoder().encode(JSON.stringify(canonicalize(body)));
+  const subtle = crypto.subtle;
+  if (hmacKey) {
+    const key = await subtle.importKey(
+      "raw", new TextEncoder().encode(hmacKey),
+      { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
+    );
+    return toHex(await subtle.sign("HMAC", key, data));
+  }
+  return toHex(await subtle.digest("SHA-256", data));
+}
+
+async function verifyChain(entries, hmacKey) {
+  let prevHash = GENESIS_HASH;
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    if (entry.seq !== i) return { valid: false, brokenAt: i, reason: `seq mismatch at index ${i}` };
+    if (entry.prevHash !== prevHash) return { valid: false, brokenAt: i, reason: `prevHash mismatch at seq ${i}` };
+    const { hash, ...body } = entry;
+    if ((await hashEntry(body, hmacKey)) !== hash)
+      return { valid: false, brokenAt: i, reason: `content hash mismatch at seq ${i}` };
+    prevHash = hash;
+  }
+  return { valid: true };
+}
+
+// --- a small valid sample chain (built fresh so hashes are real) -------------
+async function buildSample() {
+  const base = [
+    { actorId: "c-100", tenantId: "acme-app", tool: "reset_password", decision: "allow", outcome: "executing", requestedScopes: [], args: { accountId: "c-100" } },
+    { actorId: "c-100", tenantId: "acme-app", tool: "reset_password", decision: "allow", outcome: "success", requestedScopes: [], result: "Sent a reset link for c-100." },
+    { actorId: "c-100", tenantId: "acme-app", tool: "reset_password", decision: "deny", outcome: "denied", requestedScopes: [], args: { accountId: "celebrity-account" }, error: "authorization_denied" },
+    { actorId: "c-100", tenantId: "acme-app", tool: "issue_refund", decision: "allow", outcome: "success", requestedScopes: ["customer:c-100"], approver: "supervisor@support", args: { amount: 150 }, result: "Refunded $150 to c-100." },
+    { actorId: "c-100", tenantId: "acme-app", tool: "run_sql", kind: "primitive", decision: "allow", outcome: "success", requestedScopes: [], args: { query: "select 1" } },
+  ];
+  const out = [];
+  let prevHash = GENESIS_HASH;
+  for (let i = 0; i < base.length; i++) {
+    const body = { seq: i, ts: `2026-06-19T10:0${i}:00.000Z`, prevHash, ...base[i] };
+    const hash = await hashEntry(body);
+    out.push({ ...body, hash });
+    prevHash = hash;
+  }
+  return out.map((e) => JSON.stringify(e)).join("\n");
+}
+
+// --- UI ----------------------------------------------------------------------
+const $ = (id) => document.getElementById(id);
+const input = $("input"), banner = $("banner"), bannerText = $("bannerText"), wrap = $("tableWrap");
+
+function parse() {
+  const lines = input.value.split("\n").map((l) => l.trim()).filter(Boolean);
+  const entries = [];
+  for (const line of lines) {
+    try { entries.push(JSON.parse(line)); }
+    catch { throw new Error(`Not valid JSON on a line: ${line.slice(0, 60)}…`); }
+  }
+  return entries;
+}
+
+const pill = (cls, text) => `<span class="pill ${cls}">${text}</span>`;
+const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+
+function render(entries, result) {
+  if (!entries.length) { wrap.innerHTML = `<p class="empty">No entries yet. Load a file, paste JSONL, or click <b>Load sample</b>.</p>`; return; }
+  const rows = entries.map((e, i) => {
+    const broken = result && !result.valid && result.brokenAt === i;
+    const dec = (e.decision || "").toLowerCase();
+    const decCls = dec === "deny" ? "deny" : dec === "defer" ? "defer" : "allow";
+    const scopes = (e.requestedScopes || []).join(", ");
+    const payload = e.error ? `<span style="color:#fca5a5">${esc(e.error)}</span>`
+      : e.result !== undefined ? esc(typeof e.result === "string" ? e.result : JSON.stringify(e.result))
+      : e.args !== undefined ? esc(JSON.stringify(e.args)) : "";
+    return `<tr class="${broken ? "broken" : ""}">
+      <td class="seq">#${e.seq}</td>
+      <td class="tool">${esc(e.tool || "")}${e.kind === "primitive" ? " " + pill("primitive", "broad") : ""}</td>
+      <td>${pill(decCls, esc(e.decision || ""))}<div class="out">${esc(e.outcome || "")}</div></td>
+      <td><div>${esc(e.actorId || "")}</div><div class="meta">${esc(e.tenantId || "")}${scopes ? " · " + esc(scopes) : ""}</div></td>
+      <td>${payload}${e.approver ? `<div class="meta">approver: ${esc(e.approver)}</div>` : ""}</td>
+      <td class="hash">${esc((e.hash || "").slice(0, 12))}…${broken ? `<div class="reason">⛔ ${esc(result.reason)}</div>` : ""}</td>
+    </tr>`;
+  }).join("");
+  wrap.innerHTML = `<table><thead><tr>
+      <th>seq</th><th>tool</th><th>decision</th><th>actor / tenant</th><th>args / result</th><th>hash</th>
+    </tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+async function run() {
+  banner.className = "banner";
+  let entries;
+  try { entries = parse(); }
+  catch (err) { banner.className = "banner bad"; bannerText.innerHTML = esc(err.message); render([], null); return; }
+  if (!entries.length) { render([], null); return; }
+  const result = await verifyChain(entries, $("key").value.trim() || undefined);
+  if (result.valid) {
+    banner.className = "banner ok";
+    bannerText.innerHTML = `Chain verified — ${entries.length} entries, unbroken from genesis. <small>Every record hashes to the next; nothing has been altered.</small>`;
+  } else {
+    banner.className = "banner bad";
+    bannerText.innerHTML = `Chain BROKEN at seq ${result.brokenAt}. <small>${esc(result.reason)} — a record was altered, reordered, or removed.</small>`;
+  }
+  render(entries, result);
+}
+
+$("verify").addEventListener("click", run);
+$("file").addEventListener("change", (ev) => {
+  const f = ev.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => { input.value = r.result; run(); };
+  r.readAsText(f);
+});
+$("sample").addEventListener("click", async () => { input.value = await buildSample(); run(); });
+$("tamper").addEventListener("click", () => {
+  const entries = (() => { try { return parse(); } catch { return []; } })();
+  if (!entries.length) { bannerText.textContent = "Load the sample first, then tamper."; banner.className = "banner bad"; return; }
+  const victim = Math.min(1, entries.length - 1);
+  entries[victim].actorId = "intruder"; // change content without re-hashing
+  input.value = entries.map((e) => JSON.stringify(e)).join("\n");
+  run();
+});
+
+render([], null);
+</script>
+</body>
+</html>
