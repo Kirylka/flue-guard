@@ -61,7 +61,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "check": "npm run typecheck",
+    "lint": "eslint .",
+    "check": "npm run typecheck && npm run lint",
     "test": "npm run build && node --test \"dist/test/**/*.test.js\"",
     "example": "npm run build && node dist/examples/support-agent.js",
     "spike": "npm run build && node scripts/live-faux-spike.mjs",
@@ -72,9 +73,12 @@
     "@flue/runtime": "^1.0.0-beta.1"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@flue/runtime": "^1.0.0-beta.1",
     "@types/node": "^22.0.0",
+    "eslint": "^10.6.0",
     "typescript": "^5.5.0",
+    "typescript-eslint": "^8.62.1",
     "valibot": "^1.4.1"
   }
 }

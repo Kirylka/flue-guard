@@ -120,7 +120,7 @@ function fakeKv(): KvLike {
 }
 
 test("KvIdempotencyStore: start, replay, in-flight, fail, tenant isolation", async () => {
-  let now = 1000;
+  const now = 1000;
   const store = new KvIdempotencyStore(fakeKv(), () => now);
 
   assert.equal((await store.begin("acme", "k1")).status, "started");

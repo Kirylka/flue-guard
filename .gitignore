@@ -3,3 +3,4 @@ dist/
 *.log
 audit*.jsonl
 .DS_Store
+.superpowers/

@@ -32,7 +32,6 @@ import {
   GovernanceConfigError,
   IdempotencyConflictError,
   type AuditInput,
-  type AuditEntry,
   type IdempotencyStore,
   type FlueCompatibleTool,
   type TrustedContext,
