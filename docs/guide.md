@@ -258,6 +258,22 @@ runs and the outcome after; everything else writes a single record.
 
 ## Human-in-the-loop approval
 
+A tool opts into approval with an `approval` policy. `always("side effect")`
+requires it on every call and records that reason; a predicate `(a, ctx) => …`
+requires it only when it returns a reason string; `never()` is explicit opt-out.
+
+```ts
+gov.tool({
+  name: "issue_refund",
+  // ...
+  approval: always("side effect"),
+});
+```
+
+Per-conversation "approve once" memory belongs in your `ApprovalAdapter` (it
+receives `ref` for exactly this), not in the policy — the policy decides
+*whether* a call needs approval, the adapter decides *whether it already has it*.
+
 Real approvals take minutes or hours, so blocking the agent while you wait isn't
 an option. The approval adapter handles this by *suspending* instead of
 blocking: return `{ pending: true }` and the tool call throws an

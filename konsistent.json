@@ -5,7 +5,7 @@
       "name": "root-entry-exports",
       "paths": "src/index.ts",
       "must": {
-        "export": ["govern", "createGovernedToolkit", "caller", "trusted"],
+        "export": ["govern", "createGovernedToolkit", "caller", "trusted", "always", "never"],
         "exportTypes": ["TrustedContext", "ExecutionContext", "GovernedToolSpec"]
       }
     },
@@ -19,7 +19,18 @@
     {
       "name": "adapters-entry-exports",
       "paths": "src/adapters.ts",
-      "must": { "export": ["toFlueTool"] }
+      "must": {
+        "export": [
+          "defaultRbac",
+          "autoApprove",
+          "InMemoryIdempotencyStore",
+          "scopeAllowed",
+          "normalizeScopes",
+          "deniedScopes",
+          "hostContextResolver",
+          "toFlueTool"
+        ]
+      }
     },
     {
       "name": "testing-entry-exports",

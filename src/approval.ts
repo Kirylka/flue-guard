@@ -54,3 +54,20 @@ export const autoApprove: ApprovalAdapter = {
     return { approved: true, approver: "auto" };
   },
 };
+
+/**
+ * Policy sugar: `approval: always()` reads better than `approval: true`.
+ * Triggers approval on every call, with `reason` recorded when given.
+ */
+export function always(reason?: string): ApprovalPolicy {
+  return () => reason ?? true;
+}
+
+/**
+ * Explicitly no approval. Returns the literal `false` policy — NOT a
+ * function — so the "side-effecting tool must declare a gate" check does not
+ * count it as an authorization gate.
+ */
+export function never(): ApprovalPolicy {
+  return false;
+}

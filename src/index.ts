@@ -66,4 +66,5 @@ export type {
   ApprovalRequest,
   ApprovalDecision,
 } from "./approval.js";
+export { always, never } from "./approval.js";
 export type { Redactor } from "./redaction.js";
