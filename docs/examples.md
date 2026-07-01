@@ -52,7 +52,7 @@ stand-in. It has also been run end to end through a real Flue
 dispatched agent turn (`npm run spike`) — proving the per-invocation binding and
 enforcement work on Flue's detached execution path, and that a denied call comes
 back to the model as a tool error. Flue's own API is still in beta (`@flue/runtime`
-1.0.0-beta.1), so expect some churn there.
+1.0.0-beta.9), so expect some churn there.
 
 If you want the reasoning instead of just the code:
 

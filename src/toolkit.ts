@@ -240,7 +240,7 @@ export interface GovernedToolkit {
    * given resolver) instead of the ambient one. Use this for Flue's dispatched
    * / addressable-agent pattern, where tool calls run detached from the caller
    * so `ContextStore` (AsyncLocalStorage) can't reach them: bind the context
-   * per invocation inside `createAgent`, derived from `ctx.payload`/`ctx.env`.
+   * per invocation inside `defineAgent`, derived from `ctx.payload`/`ctx.env`.
    * All other collaborators (audit, idempotency, adapters) are shared.
    */
   withContext(context: TrustedContext | ContextResolver): GovernedToolkit;

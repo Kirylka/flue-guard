@@ -11,8 +11,8 @@
  *        letting a retry duplicate an external side effect.
  *   F5 — exceptions from governance steps (scope/RBAC/authorize/...) escaped
  *        without an audit record, contradicting "every decision, hash-chained".
- *   F6 — toFlueTool could return a non-string (undefined / bigint / cyclic),
- *        violating Flue's `Promise<string>` contract.
+ *   F6 — toFlueTool must emit Flue's beta.3+ `run` contract and return the
+ *        handler's structured result directly (Flue owns JSON serialization).
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -244,7 +244,7 @@ test("F5: an exception from scope derivation is audited too", async () => {
 });
 
 // --- F6 ---------------------------------------------------------------------
-test("F6: toFlueTool always returns a string", async () => {
+test("F6: toFlueTool returns the handler's structured result directly", async () => {
   const make = (value: unknown): FlueCompatibleTool => ({
     name: "t",
     description: "",
@@ -252,21 +252,16 @@ test("F6: toFlueTool always returns a string", async () => {
     execute: async () => value,
   });
 
-  const undef = toFlueTool(make(undefined));
-  assert.equal(typeof (await undef.execute({})), "string");
-
-  const big = toFlueTool(make(10n));
-  const bigOut = await big.execute({});
-  assert.equal(typeof bigOut, "string");
-  assert.match(bigOut, /10/);
-
-  const cyclic: Record<string, unknown> = {};
-  cyclic.self = cyclic;
-  const cyc = toFlueTool(make(cyclic));
-  assert.equal(typeof (await cyc.execute({})), "string");
-
+  // Flue's beta.3+ contract snapshots and JSON-serializes the value itself, so
+  // toFlueTool returns structured data unchanged rather than stringifying it.
   const obj = toFlueTool(make({ ok: true }));
-  assert.equal(await obj.execute({}), '{"ok":true}');
+  assert.deepEqual(await obj.run({}), { ok: true });
+
+  const str = toFlueTool(make("hello"));
+  assert.equal(await str.run({}), "hello");
+
+  const undef = toFlueTool(make(undefined));
+  assert.equal(await undef.run({}), undefined);
 });
 
 // --- Round 2 ----------------------------------------------------------------
@@ -296,9 +291,10 @@ test("R1: idempotency keys cannot collide across tools through the delimiter", a
 });
 
 // R2: a non-JSON-serializable result must not break the audit. The result is
-// redacted and hash-chained *before* toFlueTool stringifies it, so the audit
-// layer itself has to tolerate bigint and circular structures.
-test("R2: a bigint result is audited safely and coerced to a string", async () => {
+// redacted and hash-chained inside the governance pipeline, so the audit layer
+// itself has to tolerate bigint and circular structures — independently of how
+// Flue later serializes the value toFlueTool returns.
+test("R2: a bigint result is audited safely and returned to Flue as-is", async () => {
   const audit = new InMemoryAuditLog();
   const toolkit = createGovernedToolkit({ context: () => ctx, audit });
   let runs = 0;
@@ -312,9 +308,8 @@ test("R2: a bigint result is audited safely and coerced to a string", async () =
       return 10n;
     },
   });
-  const out = await toFlueTool(governed).execute({});
-  assert.equal(typeof out, "string");
-  assert.match(out, /10/);
+  const out = await toFlueTool(governed).run({});
+  assert.equal(out, 10n);
   assert.equal(runs, 1);
 
   const entries = await audit.entries();
@@ -335,7 +330,7 @@ test("R2: a circular result does not throw or corrupt the audit", async () => {
     unsafeAllowUnauthorized: true,
     execute: () => cyclic,
   });
-  await assert.doesNotReject(() => toFlueTool(governed).execute({}));
+  await assert.doesNotReject(() => toFlueTool(governed).run({}));
   const entries = await audit.entries();
   assert.deepEqual(await verifyChain(entries), { valid: true });
   assert.doesNotThrow(() => JSON.stringify(entries));
@@ -391,7 +386,7 @@ test("M3: a deeply nested result is audited without overflowing", async () => {
       return deep;
     },
   });
-  await assert.doesNotReject(() => toFlueTool(governed).execute({}));
+  await assert.doesNotReject(() => toFlueTool(governed).run({}));
   assert.equal(runs, 1);
   assert.deepEqual(await verifyChain(await audit.entries()), { valid: true });
 });
