@@ -129,11 +129,12 @@ const passthroughInput = v.looseObject({});
 /**
  * The `input` schema to emit for a governed tool. A genuine Valibot schema is
  * forwarded as-is (Flue validates the model's arguments against it and the
- * model sees the real parameter shape). Anything else — a function or zod-like
- * `{ parse }` validator (validated internally by the governance core), or no
- * validator at all — degrades to an unconstrained object passthrough: the
- * model sees no parameter constraints, but its arguments still arrive intact
- * for the internal validator and the governance predicates to work on.
+ * model sees the real parameter shape). Anything else — a function, a zod-like
+ * `{ parse }`, or a non-Valibot Standard Schema (all validated internally by
+ * the governance core), or no validator at all — degrades to an unconstrained
+ * object passthrough: the model sees no parameter constraints, but its
+ * arguments still arrive intact for the internal validator and the governance
+ * predicates to work on.
  */
 function asFlueInput(parameters: unknown): object {
   if (!parameters || typeof parameters !== "object") return passthroughInput;

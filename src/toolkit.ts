@@ -123,7 +123,13 @@ export interface GovernedToolSpec<TArgs, TResult> {
   sideEffect?: boolean;
   /** Roles required to call (any-of, via the RBAC adapter). */
   requireRoles?: string[];
-  /** Derive the resource scope(s) this specific call will touch. */
+  /**
+   * Derive the resource scope(s) this specific call will touch. Scope strings
+   * are recorded in the audit log for matching/forensics, so like idempotency
+   * keys they are NOT redacted — build them from stable ids, not secrets. If
+   * `scope` is a side-effecting tool's only gate, deriving no scopes for a
+   * call is refused (fail closed) rather than treated as "in scope".
+   */
   scope?: (args: TArgs, ctx: TrustedContext) => string | string[];
   /**
    * Authorization for "is this caller allowed to do this to this target?",

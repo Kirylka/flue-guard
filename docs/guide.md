@@ -270,10 +270,13 @@ execute: async () => ({ id: "c-1", plan: "pro", internalNotes: "vip" }),
 It is **not** the redaction seam. Audit redaction still runs on the *full*
 result: the audit log records the complete (redacted) value regardless of what
 `toModelOutput` returns, and idempotent replays return the same shaped value the
-original call did. If you need to keep a secret out of the audit trail, that's
+original call did. (One nuance: a replay shapes the *persisted* result — with a
+serializing idempotency store that's the JSON-normalized value, so `toModelOutput`
+must not rely on class instances, `Date`s, or other non-JSON shapes surviving the
+store.) If you need to keep a secret out of the audit trail, that's
 `redact` — not this.
 
-One constraint under Flue (beta.3+): the value the model ends up seeing — the
+One constraint under Flue: the value the model ends up seeing — the
 handler's return, or `toModelOutput`'s — must be JSON-plain (objects, arrays,
 strings, finite numbers, booleans, `null`). Flue serializes it itself and
 rejects `bigint`, `Date`, class instances and circular structures, where the old

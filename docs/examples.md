@@ -38,8 +38,9 @@ the exact `seq` that breaks — the guarantee, demonstrated rather than asserted
 
 ## Is this real yet
 
-It's pre-release, and honest about it. The governance behavior is covered by 111
-unit and end-to-end tests, including on-disk tamper detection, the Web Crypto
+It's pre-release, and honest about it. The governance behavior is covered by
+the full unit and end-to-end suite (`npm test`), including on-disk tamper
+detection, the Web Crypto
 edge path with D1/KV adapters, a regression suite pinning the fixes from several
 rounds of security review (gate bypasses, concurrent-append chain corruption,
 cross-tool idempotency collisions and delimiter ambiguity, empty idempotency/HMAC
@@ -56,7 +57,7 @@ back to the model as a tool error. Flue's own API is still in beta (`@flue/runti
 
 If you want the reasoning instead of just the code:
 
-- [`BUSINESS_REQUIREMENTS.md`](../BUSINESS_REQUIREMENTS.md) — why it exists
-- [`FUNCTIONAL_REQUIREMENTS.md`](../FUNCTIONAL_REQUIREMENTS.md) — what it has to do
-- [`TECH_ARCHITECTURE.md`](../TECH_ARCHITECTURE.md) — how it's built
-- [`TASK_SPECS.md`](../TASK_SPECS.md) — the work, broken down
+- [`BUSINESS_REQUIREMENTS.md`](./BUSINESS_REQUIREMENTS.md) — why it exists
+- [`FUNCTIONAL_REQUIREMENTS.md`](./FUNCTIONAL_REQUIREMENTS.md) — what it has to do
+- [`TECH_ARCHITECTURE.md`](./TECH_ARCHITECTURE.md) — how it's built
+- [`TASK_SPECS.md`](./TASK_SPECS.md) — the work, broken down

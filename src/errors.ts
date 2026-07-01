@@ -152,8 +152,10 @@ export class IdempotencyConflictError extends GovernanceError {
 
 /**
  * Codes that mean governance *refused* the call. Excludes `approval_pending`
- * (a suspend signal, not a denial) and `config_error` (a definition-time bug,
- * never thrown at call time).
+ * (a suspend signal, not a denial) and `config_error` (a bug in the tool's
+ * definition or the toolkit's wiring — usually thrown at definition time,
+ * occasionally at call time when it can only be detected then, e.g. an
+ * idempotency key function returning an empty key).
  */
 const DENIAL_CODES: ReadonlySet<GovernanceErrorCode> = new Set([
   "missing_context",

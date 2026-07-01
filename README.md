@@ -4,7 +4,7 @@ In-process governance for [Flue](https://github.com/withastro/flue) tools: stop
 an agent from taking an action it isn't allowed to — on the wrong account, or
 twice — and keep a tamper-evident receipt of every one it does.
 
-**ESM-only · Node 22.19+ · `@flue/runtime` (beta.3+) peer dependency.**
+**ESM-only · Node 22.19+ · `@flue/runtime` (beta.9+) peer dependency.**
 
 ## Install
 
@@ -59,17 +59,31 @@ hash-chained into the audit log:
 context → validate → RBAC → scope → authorize → approval → idempotency → execute → audit
 ```
 
-Prefer the explicit, runtime-agnostic core over the `govern` convenience?
-`createGovernedToolkit({ audit, defineTool })` is the same toolkit with Flue's
-`defineTool` injected by you instead of for you.
+`govern()` is the way in. `createGovernedToolkit` is the explicit form of the
+same toolkit — Flue's `defineTool` injected by you instead of for you — for
+when you want to control that wiring yourself.
+
+## Sharp edges
+
+- **Results must be JSON-plain.** Flue serializes what the model sees (the
+  handler's return, or `toModelOutput`'s) and rejects `bigint`, `Date`, class
+  instances and circular structures.
+- **Use Valibot for `parameters`.** Any other validator still governs and
+  validates internally, but the model's schema guidance degrades to an
+  unconstrained object — with Valibot, Flue shows the model the real shape.
+- **Idempotency keys are audited unredacted** (for correlation). Build them
+  from stable ids, never from secrets or PII.
 
 ## Documentation
 
-- [Why this exists](./docs/motivation.md) — the Meta incident, and where this sits next to Flue
-- [Architecture](./docs/architecture.md) — how identity, governance, and the substrate stack up
-- [Guide](./docs/guide.md) — `authorize` vs `scope`, scoped tools vs primitives, context binding, approval
-- [Adapters & runtimes](./docs/adapters.md) — swapping defaults, edge / Workers, `nodejs_compat`
-- [Examples & status](./docs/examples.md) — runnable example, live Flue spike, the audit viewer, test status
+Links are absolute so they work from npmjs.com (the tarball ships only this
+README).
+
+- [Why this exists](https://github.com/Kirylka/flue-guard/blob/main/docs/motivation.md) — the Meta incident, and where this sits next to Flue
+- [Architecture](https://github.com/Kirylka/flue-guard/blob/main/docs/architecture.md) — how identity, governance, and the substrate stack up
+- [Guide](https://github.com/Kirylka/flue-guard/blob/main/docs/guide.md) — `authorize` vs `scope`, scoped tools vs primitives, context binding, approval
+- [Adapters & runtimes](https://github.com/Kirylka/flue-guard/blob/main/docs/adapters.md) — swapping defaults, edge / Workers, `nodejs_compat`
+- [Examples & status](https://github.com/Kirylka/flue-guard/blob/main/docs/examples.md) — runnable example, live Flue spike, the audit viewer, test status
 
 ## Entry points
 

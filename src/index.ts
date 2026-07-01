@@ -11,7 +11,7 @@
  *   - `flue-guard/adapters`  — default RBAC/redaction/idempotency, toFlueTool
  *   - `flue-guard/testing`   — in-memory test doubles
  *
- * ESM-only. Node 20+.
+ * ESM-only. Node 22+.
  */
 
 // --- The golden path -------------------------------------------------------

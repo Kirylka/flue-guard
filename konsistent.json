@@ -10,6 +10,27 @@
       }
     },
     {
+      "name": "errors-entry-exports",
+      "paths": "src/errors.ts",
+      "must": {
+        "export": [
+          "GovernanceError",
+          "MissingContextError",
+          "AccessDeniedError",
+          "ScopeViolationError",
+          "AuthorizationDeniedError",
+          "GovernanceConfigError",
+          "ApprovalPendingError",
+          "ApprovalDeniedError",
+          "IdempotencyConflictError",
+          "isGovernanceError",
+          "isGovernanceDenial",
+          "isApprovalPending"
+        ],
+        "exportTypes": ["GovernanceErrorCode"]
+      }
+    },
+    {
       "name": "audit-entry-exports",
       "paths": "src/audit.ts",
       "must": {
@@ -28,7 +49,12 @@
           "normalizeScopes",
           "deniedScopes",
           "hostContextResolver",
-          "toFlueTool"
+          "toFlueTool",
+          "redactFields",
+          "textRedactor",
+          "composeRedactors",
+          "defaultRedactor",
+          "identityRedactor"
         ]
       }
     },

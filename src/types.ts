@@ -42,13 +42,15 @@ export interface ParseValidator<T> {
 export type FnValidator<T> = (input: unknown) => T;
 
 /**
- * A schema/validator for tool arguments. Three accepted forms:
- *  - a function `(input) => T`, or a zod-like `{ parse }` — this library
- *    validates arguments internally;
- *  - an **opaque host schema** (e.g. a Flue/Valibot `v.object(...)` or a
- *    TypeBox `Type.Object(...)`) — passed through untouched so the host
- *    framework validates it. Flue parses model arguments against this schema
- *    before our handler runs, so no internal validation is needed.
+ * A schema/validator for tool arguments. Accepted forms:
+ *  - a function `(input) => T`, a zod-like `{ parse }`, or any
+ *    [Standard Schema](https://standardschema.dev) (Zod, ArkType, TypeBox
+ *    0.34+, …) — this library validates arguments internally;
+ *  - a **Valibot schema** — forwarded to Flue as the tool's `input`, so Flue
+ *    parses the model's arguments against it before our handler runs (no
+ *    internal re-validation, which would double-apply transforms);
+ *  - any other opaque object — passed through unchanged and validated by
+ *    nobody; prefer one of the forms above.
  *
  * Omitting a validator passes arguments through unchanged.
  */

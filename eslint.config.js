@@ -15,6 +15,10 @@ export default tseslint.config(
     },
   },
   {
+    // toolkit.ts is the generic composition root: TrustedSource and the
+    // pipeline's internal plumbing genuinely take `any` (args flow through
+    // caller-typed generics), and per-line disables would litter the file.
+    // Public signatures stay precisely typed; keep `any` out of other files.
     files: ["src/toolkit.ts"],
     rules: {
       "@typescript-eslint/no-explicit-any": "off",
