@@ -1,0 +1,30 @@
+{
+  "version": "v1",
+  "conventions": [
+    {
+      "name": "root-entry-exports",
+      "paths": "src/index.ts",
+      "must": {
+        "export": ["govern", "createGovernedToolkit", "caller", "trusted"],
+        "exportTypes": ["TrustedContext", "ExecutionContext", "GovernedToolSpec"]
+      }
+    },
+    {
+      "name": "audit-entry-exports",
+      "paths": "src/audit.ts",
+      "must": {
+        "export": ["hashEntry", "verifyChain", "HashChainAuditLog", "InMemoryAuditLog"]
+      }
+    },
+    {
+      "name": "adapters-entry-exports",
+      "paths": "src/adapters.ts",
+      "must": { "export": ["toFlueTool"] }
+    },
+    {
+      "name": "testing-entry-exports",
+      "paths": "src/testing.ts",
+      "must": { "export": ["InMemoryAuditLog", "InMemoryIdempotencyStore"] }
+    }
+  ]
+}

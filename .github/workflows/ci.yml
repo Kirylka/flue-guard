@@ -37,5 +37,6 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npx -y publint
+      - run: npm run konsistent
       - run: npx -y @arethetypeswrong/cli --pack --ignore-rules cjs-resolves-to-esm no-resolution
       - run: npm pack --dry-run
