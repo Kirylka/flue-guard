@@ -107,14 +107,18 @@ export type Outcome =
   | "pending";
 
 /**
- * A tool object shaped like Flue's `ToolDef` (`@flue/runtime`): a name, a
- * description, a parameter schema and an `execute` function. Pass the result
- * through Flue's `defineTool(...)` and into `init({ tools })`.
+ * The governed tool produced by `defineGovernedTool` — the intermediate the
+ * governance core hands to {@link toFlueTool}, which maps it onto Flue's
+ * beta.3+ `ToolDefinition` (`{ name, description, input, run }`). It is NOT the
+ * Flue-facing object itself: `parameters` becomes Flue's `input` and `execute`
+ * is invoked from Flue's `run({ input, signal })`.
  *
- * Flue calls `execute` with the already-parsed arguments object. The optional
- * second `hostContext` argument carries Flue's `FlueContext` for runtimes that
- * pass it; the recommended way to supply trusted context is `ContextStore`
- * (AsyncLocalStorage) bound in the surrounding `run(...)` scope.
+ * `execute` is called with the already-parsed arguments object. The optional
+ * second `hostContext` argument is the seam for **non-Flue** runtimes that pass
+ * a context object to the tool ({@link hostContextResolver}); Flue passes none,
+ * so under Flue supply trusted context via `ContextStore` (AsyncLocalStorage)
+ * bound in the surrounding `run(...)` scope. The third argument is the host's
+ * cancellation signal, forwarded to the handler's execution context.
  */
 export interface FlueCompatibleTool {
   name: string;

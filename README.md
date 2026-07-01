@@ -4,7 +4,7 @@ In-process governance for [Flue](https://github.com/withastro/flue) tools: stop
 an agent from taking an action it isn't allowed to — on the wrong account, or
 twice — and keep a tamper-evident receipt of every one it does.
 
-**ESM-only · Node 22+ · `@flue/runtime` peer dependency.**
+**ESM-only · Node 22.19+ · `@flue/runtime` (beta.3+) peer dependency.**
 
 ## Install
 
@@ -15,7 +15,7 @@ npm i flue-guard @flue/runtime valibot
 ## Quickstart
 
 ```ts
-import { createAgent } from "@flue/runtime";
+import { defineAgent } from "@flue/runtime";
 import * as v from "valibot";
 import { govern, caller } from "flue-guard";
 
@@ -31,7 +31,7 @@ const resetPassword = gov.tool({
   execute: async (a) => { await accounts.sendResetLink(a.accountId); return "Sent."; },
 });
 
-const agent = createAgent(() => ({ model, tools: [resetPassword] }));
+const agent = defineAgent(() => ({ model, tools: [resetPassword] }));
 
 // Bind the caller from YOUR auth (never the model), once per conversation:
 await gov.run(

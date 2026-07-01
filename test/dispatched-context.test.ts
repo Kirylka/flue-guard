@@ -122,9 +122,9 @@ test("withContext composes with the real Flue defineTool + toFlueTool", async ()
     }),
   );
 
-  // Flue calls execute(args, signal) and expects a string back.
-  const out = await flueTool.execute({ accountId: "user-9" });
-  assert.equal(out, JSON.stringify({ reset: "user-9" }));
+  // Flue calls run({ input, signal }) and expects structured data back.
+  const out = await flueTool.run({ input: { accountId: "user-9" } });
+  assert.deepEqual(out, { reset: "user-9" });
   assert.equal((await audit.entries()).at(-1)!.outcome, "success");
 });
 

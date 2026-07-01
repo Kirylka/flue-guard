@@ -37,7 +37,7 @@ test("hostContextResolver extracts trusted context from a runtime host object", 
   assert.equal(entries[0]!.actorId, "u-7");
 });
 
-test("toFlueTool forwards Flue's AbortSignal to the handler's context", async () => {
+test("toFlueTool forwards Flue's run({ signal }) to the handler's context", async () => {
   const audit = new InMemoryAuditLog();
   const ctx: TrustedContext = {
     actor: { id: "a1", roles: ["agent"] },
@@ -57,7 +57,7 @@ test("toFlueTool forwards Flue's AbortSignal to the handler's context", async ()
 
   const tool = toFlueTool(governed);
   const controller = new AbortController();
-  const out = await tool.execute({}, controller.signal);
+  const out = await tool.run({ signal: controller.signal });
 
   assert.equal(out, "done");
   assert.equal(seen, controller.signal);

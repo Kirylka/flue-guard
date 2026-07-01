@@ -37,20 +37,20 @@ flowchart TB
 Here's a support tool on plain Flue. It resets a password:
 
 ```ts
-import { createAgent, defineTool } from "@flue/runtime";
+import { defineAgent, defineTool } from "@flue/runtime";
 import * as v from "valibot";
 
 const resetPassword = defineTool({
   name: "reset_password",
   description: "Send a password reset link for an account.",
-  parameters: v.object({ accountId: v.string() }),
-  execute: async (a) => {
-    await accounts.sendResetLink(a.accountId);
-    return `Sent a reset link for ${a.accountId}.`;
+  input: v.object({ accountId: v.string() }),
+  run: async ({ input }) => {
+    await accounts.sendResetLink(input.accountId);
+    return `Sent a reset link for ${input.accountId}.`;
   },
 });
 
-const agent = createAgent(() => ({ model, tools: [resetPassword] }));
+const agent = defineAgent(() => ({ model, tools: [resetPassword] }));
 ```
 
 This is the High Touch Support bug in miniature. Nothing checks that the caller
@@ -68,7 +68,7 @@ Second, here's where the check goes. For account recovery the honest gate is
 capture, so it lives in `authorize`:
 
 ```ts
-import { createAgent } from "@flue/runtime";
+import { defineAgent } from "@flue/runtime";
 import * as v from "valibot";
 import { govern, caller } from "flue-guard";
 
@@ -97,7 +97,7 @@ const resetPassword = gov.tool({                      // one call → a Flue Too
   },
 });
 
-const agent = createAgent(() => ({ model, tools: [resetPassword] }));
+const agent = defineAgent(() => ({ model, tools: [resetPassword] }));
 ```
 
 The caller's identity comes from your own auth, never the model. You set it once
@@ -203,11 +203,11 @@ that's the Quickstart in the [README](../README.md).
 **Flue drives the prompt (dispatched / addressable agents).** With `dispatch()`,
 Flue processes the turn on its own, detached from your caller, so an
 `AsyncLocalStorage` set around `dispatch()` won't reach the tool. Bind the
-context per invocation instead, inside `createAgent`, where you have the
+context per invocation instead, inside `defineAgent`, where you have the
 payload:
 
 ```ts
-const agent = createAgent((ctx) => {
+const agent = defineAgent((ctx) => {
   // ctx.payload / ctx.env came from your authenticated dispatch entrypoint.
   const trusted = deriveTrustedContext(ctx.payload, ctx.env);
   const bound = gov.withContext(trusted); // shares audit/idempotency/etc.

@@ -56,7 +56,7 @@
     "LICENSE"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=22.19"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -71,11 +71,11 @@
     "prepublishOnly": "npm run build && npm test"
   },
   "peerDependencies": {
-    "@flue/runtime": "^1.0.0-beta.1"
+    "@flue/runtime": "^1.0.0-beta.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@flue/runtime": "^1.0.0-beta.1",
+    "@flue/runtime": "^1.0.0-beta.9",
     "@types/node": "^22.0.0",
     "eslint": "^10.6.0",
     "konsistent": "1.0.0-beta.1",

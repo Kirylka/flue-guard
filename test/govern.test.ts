@@ -24,14 +24,14 @@ test("govern(): gov.tool returns a usable Flue tool gated by authorize", async (
     execute: (a) => `sent:${a.accountId}`,
   });
 
-  // It is a Flue ToolDefinition (name/description/parameters/execute).
+  // It is a Flue ToolDefinition (name/description/input/run).
   assert.equal(reset.name, "reset_password");
-  assert.equal(typeof reset.execute, "function");
+  assert.equal(typeof reset.run, "function");
 
-  // Own account: allowed, returns the (string) result Flue expects.
+  // Own account: allowed, returns the structured result Flue serializes.
   const out = await gov.run(
     { actor: { id: "u1", roles: [] }, tenantId: "t" },
-    () => reset.execute({ accountId: "u1" }),
+    () => reset.run({ input: { accountId: "u1" } }),
   );
   assert.equal(out, "sent:u1");
 
@@ -40,7 +40,7 @@ test("govern(): gov.tool returns a usable Flue tool gated by authorize", async (
     () =>
       gov.run(
         { actor: { id: "u1", roles: [] }, tenantId: "t" },
-        () => reset.execute({ accountId: "victim" }),
+        () => reset.run({ input: { accountId: "victim" } }),
       ),
     AuthorizationDeniedError,
   );

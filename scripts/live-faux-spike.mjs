@@ -16,7 +16,7 @@ import {
   createFlueContext,
   bashFactoryToSessionEnv,
 } from "@flue/runtime/internal";
-import { createAgent, defineTool, dispatch, observe } from "@flue/runtime";
+import { defineAgent, defineTool, dispatch, observe } from "@flue/runtime";
 import {
   registerFauxProvider,
   fauxAssistantMessage,
@@ -40,7 +40,7 @@ async function main() {
     fauxAssistantMessage("Done — reset link sent."),
   ]);
 
-  // 2. Governed tool, bound per-invocation (pattern 2) inside createAgent.
+  // 2. Governed tool, bound per-invocation (pattern 2) inside defineAgent.
   let resets = 0;
   const audit = new InMemoryAuditLog();
   const base = createGovernedToolkit({
@@ -50,7 +50,7 @@ async function main() {
     audit,
   });
 
-  const agent = createAgent(() => {
+  const agent = defineAgent(() => {
     const trusted = {
       actor: { id: "user-7", roles: ["account_holder"] },
       tenantId: "app",
