@@ -266,15 +266,38 @@ export interface GovernedToolkit {
   peek(): TrustedContext | undefined;
 }
 
-function makeValidator<T>(v?: ArgValidator<T>): (input: unknown) => T {
+function makeValidator<T>(v?: ArgValidator<T>): (input: unknown) => T | Promise<T> {
   if (!v) return (input) => input as T;
+  // A Standard Schema (https://standardschema.dev). Valibot is the one vendor
+  // NOT validated here: asFlueInput forwards genuine Valibot schemas to Flue as
+  // the tool's `input`, so arguments arrive already parsed and re-validating
+  // would double-apply transforms. Every other vendor gets Flue's passthrough
+  // `input`, so the raw model arguments MUST be validated internally. This
+  // branch must run before the function check: some libraries' schemas (e.g.
+  // ArkType) are callable, and *calling* one returns its errors instead of
+  // throwing — which would silently hand the errors object to the handler.
+  const std = (v as { "~standard"?: StandardSchemaV1<T>["~standard"] })[
+    "~standard"
+  ];
+  if (std && typeof std.validate === "function" && std.vendor !== "valibot") {
+    return async (input) => {
+      const result = (await std.validate(input)) as
+        | { value: T; issues?: undefined }
+        | { issues: ReadonlyArray<{ message: string }> };
+      if (result.issues) {
+        throw new Error(result.issues.map((i) => i.message).join("; "));
+      }
+      return result.value;
+    };
+  }
   if (typeof v === "function") return v as (input: unknown) => T;
   const maybeParse = (v as { parse?: unknown }).parse;
   if (typeof maybeParse === "function") {
     return (input) => (v as ParseValidator<T>).parse(input);
   }
-  // Opaque host schema (e.g. Flue/Valibot, TypeBox): the host validates it;
-  // arguments arrive already parsed, so pass them through unchanged.
+  // Genuine Valibot: Flue validates it (see above). Any other opaque schema
+  // object is passed through unchanged — nobody validates it, so prefer a
+  // function, `{ parse }`, or Standard Schema form for internal validation.
   return (input) => input as T;
 }
 
@@ -387,6 +410,25 @@ export function createGovernedToolkit(
       );
     }
 
+    // `approval: false` is explicitly "no approval" and `evaluateApproval`
+    // treats it as such at runtime, so it must NOT count as a gate — only
+    // `approval: true` or a policy function does.
+    const approvalGates =
+      spec.approval === true || typeof spec.approval === "function";
+
+    // When `scope` is the ONLY thing satisfying the side-effect gate below, it
+    // is load-bearing: a call for which it derives no scopes would pass the
+    // scope check vacuously and run the side effect ungated, so the runtime
+    // pipeline fails closed on an empty derivation for exactly this case.
+    const scopeIsOnlyGate =
+      Boolean(spec.sideEffect) &&
+      !spec.unsafeAllowUnauthorized &&
+      (spec.kind ?? "scoped") === "scoped" &&
+      Boolean(spec.scope) &&
+      !spec.authorize &&
+      (spec.requireRoles?.length ?? 0) === 0 &&
+      !approvalGates;
+
     // Fail closed at definition time: a side-effecting tool must be gated.
     // The required gate differs by `kind` (the structural answer to both "the
     // check lived nowhere" and "general primitives can't be arg-scoped").
@@ -405,11 +447,6 @@ export function createGovernedToolkit(
           );
         }
       } else {
-        // `approval: false` is explicitly "no approval" and `evaluateApproval`
-        // treats it as such at runtime, so it must NOT count as a gate here —
-        // only `approval: true` or a policy function does.
-        const approvalGates =
-          spec.approval === true || typeof spec.approval === "function";
         const gated =
           Boolean(spec.scope) ||
           Boolean(spec.authorize) ||
@@ -483,7 +520,7 @@ export function createGovernedToolkit(
         // 2. Validate arguments.
         let args: TArgs;
         try {
-          args = validate(rawArgs);
+          args = await validate(rawArgs);
         } catch (err) {
           await audit({
             ...base,
@@ -528,6 +565,13 @@ export function createGovernedToolkit(
 
         // 4. Scope / tenant isolation.
         const allowedScopes = ctx.scopes ?? [];
+        // A load-bearing scope gate must actually derive something: an empty
+        // requested list is vacuously "in scope", which would let this side
+        // effect run ungated for this call. Fail closed instead.
+        if (scopeIsOnlyGate && requested.length === 0) {
+          await denyAudit("scope_violation");
+          throw new ScopeViolationError(spec.name, [], allowedScopes);
+        }
         const denied = deniedScopes(requested, allowedScopes);
         if (denied.length > 0) {
           await denyAudit("scope_violation");
@@ -624,19 +668,9 @@ export function createGovernedToolkit(
           idempotencyKey?: string,
         ): Promise<unknown> => {
           await writeIntent(idempotencyKey);
+          let result: TResult;
           try {
-            const result = await spec.execute(args, execCtx);
-            await audit({
-              ...base,
-              decision: "allow",
-              outcome: "success",
-              requestedScopes: requested,
-              args: redactedArgs,
-              result: redactor(result),
-              approver,
-              idempotencyKey,
-            });
-            return shape(result);
+            result = await spec.execute(args, execCtx);
           } catch (err) {
             await audit({
               ...base,
@@ -651,6 +685,21 @@ export function createGovernedToolkit(
             audited = true;
             throw err;
           }
+          await audit({
+            ...base,
+            decision: "allow",
+            outcome: "success",
+            requestedScopes: requested,
+            args: redactedArgs,
+            result: redactor(result),
+            approver,
+            idempotencyKey,
+          });
+          // The outcome is on the chain. `shape` runs outside the try so a
+          // toModelOutput bug propagates without writing a second,
+          // contradictory outcome record for the same call.
+          audited = true;
+          return shape(result);
         };
 
         // 7. Idempotency (only when a policy is declared).
@@ -689,6 +738,9 @@ export function createGovernedToolkit(
               approver,
               idempotencyKey: rawKey,
             });
+            // Outcome recorded; a toModelOutput throw below must not write a
+            // second outcome record (see runAndAudit).
+            audited = true;
             return shape(begin.record.result as TResult);
           }
 
@@ -760,6 +812,9 @@ export function createGovernedToolkit(
             approver,
             idempotencyKey: rawKey,
           });
+          // Outcome recorded; a toModelOutput throw below must not write a
+          // second outcome record (see runAndAudit).
+          audited = true;
           return shape(result);
         }
 

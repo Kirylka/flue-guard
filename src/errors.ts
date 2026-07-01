@@ -68,8 +68,12 @@ export class ScopeViolationError extends GovernanceError {
   constructor(tool: string, requested: string[], allowed: string[]) {
     super(
       "scope_violation",
-      `"${tool}" attempted to act on scope(s) [${requested.join(", ")}] ` +
-        `outside the actor's allowed scopes [${allowed.join(", ")}].`,
+      requested.length === 0
+        ? `"${tool}" is gated only by scope but derived no scopes for this ` +
+            "call, so the gate cannot apply — refusing (fail closed). Derive " +
+            "at least one scope for every call, or declare another gate."
+        : `"${tool}" attempted to act on scope(s) [${requested.join(", ")}] ` +
+            `outside the actor's allowed scopes [${allowed.join(", ")}].`,
       tool,
     );
     this.requested = requested;
