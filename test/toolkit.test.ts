@@ -472,3 +472,44 @@ test("the returned object is a Flue-compatible tool", () => {
   assert.equal(typeof tool.execute, "function");
   assert.ok("parameters" in tool);
 });
+
+test("toModelOutput shapes the returned value but audits the full result", async () => {
+  const { toolkit, audit } = setup();
+  const tool = toolkit.defineGovernedTool({
+    name: "lookup_customer",
+    description: "Look up a customer record.",
+    authorize: caller(() => true),
+    toModelOutput: (r: { id: string }) => ({ id: r.id }),
+    execute: async () => ({ id: "c-1", plan: "pro", internalNotes: "vip" }),
+  });
+  const out = await tool.execute({});
+  assert.deepEqual(out, { id: "c-1" }); // model sees only the shaped value
+  const success = (await audit.entries()).find((e) => e.outcome === "success");
+  assert.ok(success);
+  // audit keeps the full (redacted) result, not the shaped one
+  assert.equal(
+    (success.result as { internalNotes: string }).internalNotes,
+    "vip",
+  );
+});
+
+test("a replayed call returns the same shaped value as the original", async () => {
+  const { toolkit } = setup();
+  let calls = 0;
+  const tool = toolkit.defineGovernedTool({
+    name: "send_invoice",
+    description: "Send an invoice.",
+    sideEffect: true,
+    authorize: caller(() => true),
+    idempotency: { key: () => "inv-1" },
+    toModelOutput: (r: { id: string }) => ({ id: r.id }),
+    execute: async () => {
+      calls++;
+      return { id: "i-1", amount: 100 };
+    },
+  });
+  const first = await tool.execute({});
+  const second = await tool.execute({});
+  assert.equal(calls, 1);
+  assert.deepEqual(second, first);
+});

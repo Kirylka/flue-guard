@@ -256,6 +256,23 @@ runs and the outcome after; everything else writes a single record.
   adapters rather than the main story. See
   [Adapters & runtimes](./adapters.md).
 
+## Shaping model output
+
+`toModelOutput(result, ctx)` shapes only what the model/host sees of a tool's
+return. Use it for **context hygiene** — keep big blobs or internal-only fields
+out of the model's context window:
+
+```ts
+toModelOutput: (r) => ({ id: r.id }), // model gets just the id
+execute: async () => ({ id: "c-1", plan: "pro", internalNotes: "vip" }),
+```
+
+It is **not** the redaction seam. Audit redaction still runs on the *full*
+result: the audit log records the complete (redacted) value regardless of what
+`toModelOutput` returns, and idempotent replays return the same shaped value the
+original call did. If you need to keep a secret out of the audit trail, that's
+`redact` — not this.
+
 ## Human-in-the-loop approval
 
 A tool opts into approval with an `approval` policy. `always("side effect")`

@@ -146,6 +146,12 @@ export interface GovernedToolSpec<TArgs, TResult> {
   /** Redact args/result before they go to the audit log (per-tool override). */
   redact?: Redactor;
   /**
+   * Shape only what the model sees of the result. The audit log still records
+   * the full result (through the redactor); the value returned to the
+   * host/model is this function's output.
+   */
+  toModelOutput?: (result: TResult, ctx: ExecutionContext) => unknown;
+  /**
    * How the tool's arguments relate to its blast radius (default `"scoped"`):
    *  - `"scoped"`: structured args with a real target — fully governable
    *    in-process by scope/authorize.
@@ -607,9 +613,16 @@ export function createGovernedToolkit(
               })
             : Promise.resolve(undefined);
 
+        // Single exit point for the model-visible return. The audit log and the
+        // idempotency store both keep the full result; only this shapes what the
+        // model/host sees. Replay routes its stored (full) result through here
+        // too, so a replayed call returns exactly what the original returned.
+        const shape = (result: TResult): unknown =>
+          spec.toModelOutput ? spec.toModelOutput(result, execCtx) : result;
+
         const runAndAudit = async (
           idempotencyKey?: string,
-        ): Promise<TResult> => {
+        ): Promise<unknown> => {
           await writeIntent(idempotencyKey);
           try {
             const result = await spec.execute(args, execCtx);
@@ -623,7 +636,7 @@ export function createGovernedToolkit(
               approver,
               idempotencyKey,
             });
-            return result;
+            return shape(result);
           } catch (err) {
             await audit({
               ...base,
@@ -676,7 +689,7 @@ export function createGovernedToolkit(
               approver,
               idempotencyKey: rawKey,
             });
-            return begin.record.result;
+            return shape(begin.record.result as TResult);
           }
 
           if (begin.status === "in_flight") {
@@ -747,7 +760,7 @@ export function createGovernedToolkit(
             approver,
             idempotencyKey: rawKey,
           });
-          return result;
+          return shape(result);
         }
 
         // 8. No idempotency: execute and audit.
