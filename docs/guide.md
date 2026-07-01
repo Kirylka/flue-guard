@@ -273,6 +273,12 @@ result: the audit log records the complete (redacted) value regardless of what
 original call did. If you need to keep a secret out of the audit trail, that's
 `redact` — not this.
 
+One constraint under Flue (beta.3+): the value the model ends up seeing — the
+handler's return, or `toModelOutput`'s — must be JSON-plain (objects, arrays,
+strings, finite numbers, booleans, `null`). Flue serializes it itself and
+rejects `bigint`, `Date`, class instances and circular structures, where the old
+adapter coerced them to a string.
+
 ## Human-in-the-loop approval
 
 A tool opts into approval with an `approval` policy. `always("side effect")`

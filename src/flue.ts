@@ -22,13 +22,19 @@
  * Three facts shape this adapter:
  *  - `run` receives a single **context object** `{ input, signal }` — no
  *    positional args, and (unlike some runtimes) **no host context**. `input` is
- *    Flue's already-parsed model arguments.
+ *    Flue's already-parsed model arguments — and it only exists when the tool
+ *    declares an `input` schema, so this adapter ALWAYS declares one (a genuine
+ *    Valibot `parameters` schema as-is; anything else degrades to an
+ *    unconstrained object passthrough so the arguments still arrive for the
+ *    internal validator and the governance predicates).
  *  - `run` returns **structured data directly**. Flue validates it against the
  *    declared `output` (we declare none), snapshots it, and JSON-serializes it
  *    for the model — so we no longer `JSON.stringify` the result ourselves.
- *  - `input` must be a Valibot object schema (or omitted). Function/`{ parse }`
- *    validators stay internal to the governance core; only a genuine Valibot
- *    schema is forwarded to Flue for model-argument validation.
+ *    Consequence: handler results must be JSON-plain (objects/arrays/strings/
+ *    numbers/booleans/null). Flue rejects `bigint`, `Date`, class instances and
+ *    circular structures, where the pre-beta.3 adapter coerced them to a string.
+ *  - `input` must be a Valibot top-level object schema; Flue rejects anything
+ *    else, which is why non-Valibot validators can't be forwarded.
  *
  * Because `run` carries no host context, trusted context must be bound out of
  * band via {@link ContextStore} (AsyncLocalStorage) at the agent/workflow
@@ -81,12 +87,13 @@
 
 import type { ContextResolver } from "./context.js";
 import { MissingContextError } from "./errors.js";
+import * as v from "valibot";
 import type { FlueCompatibleTool, TrustedContext } from "./types.js";
 
 /**
  * The context object Flue passes to a tool's `run`: the already-parsed model
- * arguments and the cancellation signal. Mirrors Flue's `ToolContext`, kept
- * dependency-free.
+ * arguments and the cancellation signal. Mirrors Flue's `ToolContext`
+ * structurally, without importing it.
  */
 export interface FlueRunContext {
   input?: Record<string, unknown>;
@@ -94,11 +101,12 @@ export interface FlueRunContext {
 }
 
 /**
- * Structural shape of a Flue (`@flue/runtime` beta.3+) `ToolDefinition`, kept
- * dependency-free. `input` is an optional Valibot object schema (typed `object`
- * to match Flue's `ToolInputSchema`); `output` is left undeclared so Flue
- * JSON-serializes the raw structured result. `run` returns structured data
- * directly — Flue validates and serializes it for the model.
+ * Structural shape of a Flue (`@flue/runtime` beta.3+) `ToolDefinition`,
+ * assignable to Flue's generic type without importing it. `input` is a Valibot
+ * object schema (typed `object` to match Flue's `ToolInputSchema`) — always
+ * emitted by {@link toFlueTool}, since without one Flue drops the model's
+ * arguments entirely. `output` is left undeclared so Flue JSON-serializes the
+ * raw structured result `run` returns.
  */
 export interface FlueToolDefinition {
   name: string;
@@ -109,18 +117,32 @@ export interface FlueToolDefinition {
 }
 
 /**
- * Forward `parameters` to Flue's `input` only when it's a genuine Valibot
- * schema. Function and zod-like `{ parse }` validators are handled by the
- * governance core's internal validation, so they must not be handed to Flue
- * (which validates `input` itself and rejects non-Valibot schemas). A missing
- * or opaque validator becomes `undefined` — no Flue-side argument validation.
+ * Passthrough `input` schema for tools whose `parameters` can't be handed to
+ * Flue as-is. Flue only invokes `run` with the arguments it parsed against a
+ * declared `input` — with no `input`, the model's arguments are dropped
+ * entirely and the handler (and every scope/authorize/idempotency predicate)
+ * would compute over `{}`. So the arguments must always travel through Flue,
+ * even when validation is ours.
  */
-function asFlueInput(parameters: unknown): object | undefined {
-  if (!parameters || typeof parameters !== "object") return undefined;
+const passthroughInput = v.looseObject({});
+
+/**
+ * The `input` schema to emit for a governed tool. A genuine Valibot schema is
+ * forwarded as-is (Flue validates the model's arguments against it and the
+ * model sees the real parameter shape). Anything else — a function or zod-like
+ * `{ parse }` validator (validated internally by the governance core), or no
+ * validator at all — degrades to an unconstrained object passthrough: the
+ * model sees no parameter constraints, but its arguments still arrive intact
+ * for the internal validator and the governance predicates to work on.
+ */
+function asFlueInput(parameters: unknown): object {
+  if (!parameters || typeof parameters !== "object") return passthroughInput;
   const std = (parameters as { "~standard"?: { vendor?: unknown } })[
     "~standard"
   ];
-  return std && std.vendor === "valibot" ? (parameters as object) : undefined;
+  return std && std.vendor === "valibot"
+    ? (parameters as object)
+    : passthroughInput;
 }
 
 /**

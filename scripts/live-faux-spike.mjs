@@ -15,13 +15,15 @@ import {
   createNodeDispatchQueue,
   createFlueContext,
   bashFactoryToSessionEnv,
+  InMemoryConversationStreamStore,
 } from "@flue/runtime/internal";
 import { defineAgent, defineTool, dispatch, observe } from "@flue/runtime";
+// pi-ai >=0.80 moved the global-registry faux API to its compat entry point.
 import {
   registerFauxProvider,
   fauxAssistantMessage,
   fauxToolCall,
-} from "@earendil-works/pi-ai";
+} from "@earendil-works/pi-ai/compat";
 import * as v from "valibot";
 import { createGovernedToolkit } from "flue-guard";
 import { InMemoryAuditLog } from "flue-guard/testing";
@@ -36,7 +38,7 @@ async function main() {
   });
   const fauxModel = faux.getModel();
   faux.setResponses([
-    fauxAssistantMessage([fauxToolCall("reset_password", { accountId: "user-7" })]),
+    fauxAssistantMessage([fauxToolCall("reset_password", { accountId: "user-7" })], { stopReason: "toolUse" }),
     fauxAssistantMessage("Done — reset link sent."),
   ]);
 
@@ -78,43 +80,40 @@ async function main() {
   const adapter = sqlite(":memory:");
   if (adapter.migrate) await adapter.migrate();
   const stores = await adapter.connect();
-  const { sessions, submissions } = stores.executionStore;
+  const { submissions } = stores.executionStore;
 
   const createDefaultEnv = () => bashFactoryToSessionEnv(() => new Bash());
   const agentConfig = { resolveModel: () => fauxModel };
 
-  const createContext = (id, runId, payload, request, initialEventIndex, dispatchId) =>
+  // beta.9: CreateAgentContextFn takes a single options object; conversation
+  // persistence is wired by the coordinator, not via defaultStore/submissionStore.
+  const createContext = ({ id, agentName, request, initialEventIndex, dispatchId }) =>
     createFlueContext({
       id,
-      runId,
+      agentName,
       dispatchId,
-      payload,
       env: {},
       agentConfig,
       createDefaultEnv,
-      defaultStore: sessions,
       req: request,
       initialEventIndex,
-      submissionStore: submissions,
     });
 
   const coordinator = createNodeAgentCoordinator({
     submissions,
-    sessions,
-    agents: { support: agent },
+    agents: [{ name: "support", definition: agent }],
     createContext,
-    eventStreamStore: stores.eventStreamStore,
+    conversationStreamStore: new InMemoryConversationStreamStore(),
   });
   const dispatchQueue = createNodeDispatchQueue(coordinator);
+  // beta.9 runtime config: `agents: [{ name, definition }]` replaces the old
+  // resolveDispatchAgentName callback + manifest.
   configureFlueRuntime({
     target: "node",
     createContext,
     dispatchQueue,
-    resolveDispatchAgentName: (a) => (a === agent ? "support" : undefined),
-    manifest: {
-      agents: [{ name: "support", created: true, transports: { http: true } }],
-      workflows: [],
-    },
+    agents: [{ name: "support", definition: agent }],
+    workflows: [],
   });
 
   observe((e) => {
@@ -137,7 +136,7 @@ async function main() {
   // 4b. Second turn: the model is talked into resetting someone else's account.
   // Scope enforcement must deny it, live, on the dispatched path.
   faux.setResponses([
-    fauxAssistantMessage([fauxToolCall("reset_password", { accountId: "celebrity-account" })]),
+    fauxAssistantMessage([fauxToolCall("reset_password", { accountId: "celebrity-account" })], { stopReason: "toolUse" }),
     fauxAssistantMessage("I can't do that."),
   ]);
   console.log("\ndispatching cross-account attempt...");

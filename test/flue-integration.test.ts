@@ -168,6 +168,63 @@ test("toolkit.tool() one-call helper infers args and returns a Flue tool", async
   assert.equal(out, "refunded 40 to c-1 for acme");
 });
 
+test("a { parse } validator degrades to a passthrough input; args still arrive", async () => {
+  // Non-Valibot `parameters` can't be forwarded as Flue's `input` — but with NO
+  // input declared, Flue drops the model's arguments entirely. Regression for
+  // the silent-fallback bug: the emitted passthrough schema must (1) be accepted
+  // by the real defineTool, (2) deliver the model's args to the handler, and
+  // (3) let the internal validator run on the REAL args, not `{}`.
+  const ctx = new ContextStore();
+  const toolkit = createGovernedToolkit({
+    context: ctx.resolver(),
+    audit: new InMemoryAuditLog(),
+  });
+  let seen: unknown;
+  const governed = toolkit.defineGovernedTool<{ accountId: string }>({
+    name: "lookup_account",
+    description: "Look up an account.",
+    parameters: {
+      parse: (input: unknown) => {
+        const o = input as { accountId?: unknown };
+        if (typeof o.accountId !== "string") throw new Error("accountId required");
+        return o as { accountId: string };
+      },
+    },
+    execute: (a) => {
+      seen = a;
+      return `found ${a.accountId}`;
+    },
+  });
+
+  // (1) The real Flue defineTool accepts the passthrough input schema.
+  const tool = defineFlueTool(toFlueTool(governed));
+  assert.ok(tool.input);
+  // The passthrough parses arbitrary object args without stripping keys.
+  assert.deepEqual(
+    v.parse(tool.input as v.GenericSchema, { accountId: "a-1", extra: 1 }),
+    { accountId: "a-1", extra: 1 },
+  );
+
+  const principal: TrustedContext = {
+    actor: { id: "u", roles: [] },
+    tenantId: "acme",
+  };
+  // (2) The model's arguments arrive at the handler.
+  const out = await ctx.run(principal, () =>
+    tool.run({ input: { accountId: "a-1" } }),
+  );
+  assert.equal(out, "found a-1");
+  assert.deepEqual(seen, { accountId: "a-1" });
+
+  // (3) The internal validator runs on the real args and can reject them.
+  await ctx.run(principal, async () => {
+    await assert.rejects(
+      () => tool.run({ input: { accountId: 42 } }),
+      /accountId required/,
+    );
+  });
+});
+
 test("toolkit.tool() throws if defineTool wasn't provided", () => {
   const toolkit = createGovernedToolkit({
     context: new ContextStore(),
