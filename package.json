@@ -71,7 +71,7 @@
     "prepublishOnly": "npm run build && npm test"
   },
   "peerDependencies": {
-    "@flue/runtime": "^1.0.0-beta.3",
+    "@flue/runtime": ">=1.0.0-beta.9 <1.0.0",
     "valibot": "^1.0.0"
   },
   "devDependencies": {
