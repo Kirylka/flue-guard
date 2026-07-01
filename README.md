@@ -4,7 +4,7 @@ In-process governance for [Flue](https://github.com/withastro/flue) tools: stop
 an agent from taking an action it isn't allowed to — on the wrong account, or
 twice — and keep a tamper-evident receipt of every one it does.
 
-**ESM-only · Node 20+ · `@flue/runtime` peer dependency.**
+**ESM-only · Node 22+ · `@flue/runtime` peer dependency.**
 
 ## Install
 
