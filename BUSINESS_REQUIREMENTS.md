@@ -194,4 +194,4 @@ runtimes, a formal policy DSL.
 3. Naming: `flue-guard` (current pick) vs. `flue-tool-governance` /
    `flue-side-effect-guard` / `flue-enterprise-toolkit`.
 4. Is the first published artifact the **library**, an **article** explaining
-   the wedge, or both together (this repo is an Articles repo)?
+   the wedge, or both together?
