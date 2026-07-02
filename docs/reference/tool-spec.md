@@ -76,7 +76,7 @@ An empty array means unrestricted and does not count as a gate.
 ## `scope`
 
 Derives the resource scope(s) this specific call touches, from the arguments
-and trusted context, e.g. `(a) => \`customer:\${a.customerId}\``. Each derived
+and trusted context, e.g. ``(a) => `customer:${a.customerId}` ``. Each derived
 scope must be covered by a pattern in `ctx.scopes` or the call throws
 `ScopeViolationError`. Patterns are literal except `*`, which matches any run
 of characters.
