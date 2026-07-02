@@ -60,18 +60,15 @@ from above both: whatever authenticates your users (your IdP, your session
 layer) is the source of the `TrustedContext` you bind at the request
 boundary.
 
-```
-your IdP / auth        verifies the human, issues claims
-        |
-your request handler   maps claims to TrustedContext, binds it (gov.run / withContext)
-        |
-flue-guard             per-call: validate -> RBAC -> scope -> authorize -> approval
-        |                        -> idempotency -> execute, all hash-chained to the audit log
-        |
-Flue                   harness, sessions, sandbox, model wiring
-        |
-your substrate         egress allowlists, credentials, isolation
-```
+Top to bottom, each layer feeds the one below it:
+
+| Layer | Responsibility |
+| --- | --- |
+| Your IdP / auth | Verifies the human, issues claims |
+| Your request handler | Maps claims into a `TrustedContext` and binds it (`gov.run` / `withContext`) |
+| **flue-guard** | The per-call decision pipeline, hash-chained into the audit log |
+| Flue | Harness, sessions, sandbox, model wiring |
+| Your substrate | Egress allowlists, credentials, isolation |
 
 The model sits beside this stack, not in it: it supplies arguments and
 nothing else. What each layer is trusted to do, and the attacks each one
