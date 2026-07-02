@@ -23,6 +23,9 @@ jobs:
       - run: npx -y publint
       - run: npx -y @arethetypeswrong/cli --pack --ignore-rules cjs-resolves-to-esm no-resolution
       - run: npm publish # OIDC: no token; provenance attached automatically
-      - run: gh release create "$GITHUB_REF_NAME" --generate-notes
+      # Idempotent: a re-run (or a manually created release) must not fail here.
+      - run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 ||
+            gh release create "$GITHUB_REF_NAME" --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}

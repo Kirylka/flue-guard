@@ -1,12 +1,16 @@
 # flue-guard
 
-Governance for [Flue](https://flueframework.com) tools. flue-guard stops an
-agent from acting on the wrong resource, acting twice, or acting unrecorded:
-per-call authorization checked against your app's trusted context, idempotent
-side effects, and a hash-chained audit log, all in-process.
+[![npm](https://img.shields.io/npm/v/flue-guard)](https://www.npmjs.com/package/flue-guard)
+[![CI](https://github.com/Kirylka/flue-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/Kirylka/flue-guard/actions/workflows/ci.yml)
+[![docs](https://img.shields.io/badge/docs-site-blue)](https://kirylka.github.io/flue-guard/)
 
-Flue's own guidance is that [a tool's parameters are model-selected inputs,
-not an authorization boundary](https://flueframework.com/docs/guide/tools/#protect-access).
+Governance for [Flue](https://flueframework.com) tools: per-call
+authorization, safe retries, and a tamper-evident audit log, in-process.
+It stops an agent from acting on the wrong resource, acting twice, or acting
+unrecorded.
+
+Flue's own guidance says [a tool's parameters are model-selected inputs, not
+an authorization boundary](https://flueframework.com/docs/guide/tools/#protect-access).
 flue-guard is that boundary, as a library.
 
 **ESM-only · Node 22.19+ · peer `@flue/runtime` >=1.0.0-beta.9**
@@ -22,10 +26,12 @@ import { defineAgent, type ToolDefinition } from "@flue/runtime";
 import * as v from "valibot";
 import { govern, caller } from "flue-guard";
 
+// Stand-ins for your app's data layer and Flue session:
 declare const accounts: {
   ownedBy(accountId: string, actorId: string): Promise<boolean>;
   sendResetLink(accountId: string): Promise<void>;
 };
+declare const session: { prompt(text: string): Promise<unknown> };
 
 const gov = govern({ audit: "audit.jsonl" }); // hash-chained JSONL receipt
 
@@ -46,20 +52,13 @@ const resetPassword = gov.tool({
   },
 });
 
-export const agent = defineAgent(() => ({
+const agent = defineAgent(() => ({
   model: "anthropic/claude-haiku-4-5",
   tools: [resetPassword] as ToolDefinition[],
 }));
-```
 
-Bind the caller once per run, from your auth, never from the model:
-
-```ts
-import type { GovernedToolkit } from "flue-guard";
-
-declare const gov: GovernedToolkit;
-declare const session: { prompt(text: string): Promise<unknown> };
-
+// At your request boundary: bind who is calling, from your own auth.
+// The model can never read or set this.
 await gov.run(
   { actor: { id: "user-7", roles: ["account_holder"] }, tenantId: "acme" },
   () => session.prompt("I'm locked out, reset my password"),
@@ -74,21 +73,16 @@ tamper-evident line for every call, denials included.
 The one idea underneath: the model controls the arguments, your application
 controls the context. `authorize` and `scope` compare the untrusted arguments
 against the trusted context, which travels through `AsyncLocalStorage` where
-the model can never read or set it.
+the model can never touch it.
 
 ## Documentation
 
-The docs site: **<https://kirylka.github.io/flue-guard/>**
-
-- [Tutorial: your first governed tool](https://kirylka.github.io/flue-guard/tutorial): from `npm i` to a denied call and a verified audit line, in five minutes
-- [Choose authorize vs scope](https://kirylka.github.io/flue-guard/guides/authorize-vs-scope)
-- [Require human approval](https://kirylka.github.io/flue-guard/guides/require-approval)
-- [Make retries safe](https://kirylka.github.io/flue-guard/guides/safe-retries)
-- [Verify & protect the audit log](https://kirylka.github.io/flue-guard/guides/protect-the-audit-log)
-- [Run on Cloudflare Workers](https://kirylka.github.io/flue-guard/guides/cloudflare-workers)
-- [Shape what the model sees](https://kirylka.github.io/flue-guard/guides/shape-model-output)
-- [API reference](https://kirylka.github.io/flue-guard/reference/entry-points)
-- [Why flue-guard exists](https://kirylka.github.io/flue-guard/explanation/why-flue-guard) · [The pipeline](https://kirylka.github.io/flue-guard/explanation/pipeline) · [The trust model](https://kirylka.github.io/flue-guard/explanation/trust-model)
+| | |
+| --- | --- |
+| [Tutorial](https://kirylka.github.io/flue-guard/tutorial) | Your first governed tool: a denied call and a verified audit line, in five minutes |
+| [How-to guides](https://kirylka.github.io/flue-guard/guides/authorize-vs-scope) | Authorize vs scope, human approval, safe retries, audit protection, Cloudflare Workers, shaping model output |
+| [Reference](https://kirylka.github.io/flue-guard/reference/entry-points) | Every entry point, tool-spec field, error, and adapter interface |
+| [Explanation](https://kirylka.github.io/flue-guard/explanation/why-flue-guard) | Why it exists, the pipeline, the trust model |
 
 ## Sharp edges
 
@@ -98,12 +92,12 @@ The docs site: **<https://kirylka.github.io/flue-guard/>**
 - Use Valibot for `parameters`. Any other validator still governs and
   validates internally, but Flue's schema guidance for the model degrades to
   an unconstrained object. With Valibot, the model sees the real shape.
-- Idempotency keys and requested scopes are audited unredacted (they are
-  the log's correlation index). Build them from stable ids, never from
-  secrets or PII.
-- The file audit sink is single-writer. One process, one instance. For
-  multi-instance deployments use a store-backed sink (a database, or the
-  [D1 reference adapter](https://github.com/Kirylka/flue-guard/blob/main/examples/cloudflare-adapters.ts)).
+- Idempotency keys and requested scopes are audited unredacted (they are the
+  log's correlation index). Build them from stable ids, never from secrets
+  or PII.
+- The file audit sink is single-writer: one process, one instance. For
+  multi-instance deployments use a store-backed sink such as the
+  [D1 reference adapter](https://github.com/Kirylka/flue-guard/blob/main/examples/cloudflare-adapters.ts).
 
 ## Entry points
 
@@ -119,6 +113,8 @@ same toolkit, with Flue's `defineTool` injected by you instead of for you, for
 when you want to control that wiring yourself.
 
 ## See it run
+
+Clone this repo, then:
 
 ```bash
 npm run example   # mock-model walkthrough: denials, replay, approval, audit verify
