@@ -1,6 +1,6 @@
 {
   "name": "flue-guard",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "In-process authorization and tamper-evident audit for Flue agent tools — stop an agent acting on the wrong resource, twice, or unrecorded.",
   "type": "module",
   "license": "MIT",
