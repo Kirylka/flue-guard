@@ -4,3 +4,6 @@ dist/
 audit*.jsonl
 .DS_Store
 .superpowers/
+.samples-check/
+docs/.vitepress/dist/
+docs/.vitepress/cache/
