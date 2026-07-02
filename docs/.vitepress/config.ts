@@ -8,6 +8,12 @@ export default defineConfig({
   lastUpdated: true,
   // Planning documents live in docs/ but are not site pages.
   srcExclude: [
+    // Redirect stubs for links baked into already-published npm READMEs.
+    "motivation.md",
+    "architecture.md",
+    "guide.md",
+    "adapters.md",
+    "examples.md",
     "**/BUSINESS_REQUIREMENTS.md",
     "**/FUNCTIONAL_REQUIREMENTS.md",
     "**/MANIFEST_SPEC.md",
