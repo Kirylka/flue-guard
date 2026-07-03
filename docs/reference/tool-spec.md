@@ -95,6 +95,10 @@ import { caller, trusted } from "flue-guard";
 declare const ownsAccount: (actorId: string, accountId: string) => Promise<boolean>;
 
 // The authenticated caller: the check receives the ExecutionContext.
+// Inline in a tool spec, write it as a bare function — shorthand for
+// caller(...) with `args` inferred from `parameters`:
+//   authorize: (a, ctx) => ownsAccount(ctx.actor.id, a.accountId)
+// Standalone (nothing to infer from), use caller() and annotate:
 export const byCaller = caller(
   (a: { accountId: string }, ctx) => ownsAccount(ctx.actor.id, a.accountId),
 );
@@ -120,10 +124,11 @@ type AuthorizeSpec<TArgs> =
 A `false` result throws `AuthorizationDeniedError`. A spec that names an
 unregistered trusted source fails at definition time.
 
-Note on typing: inside a `gov.tool` literal, TypeScript resolves the
-`caller(...)` call before it infers from `parameters`, so annotate the
-argument type (`caller((a: { accountId: string }, ctx) => …)`) or use the
-plain object form, which infers fully.
+Note on typing: inside a `gov.tool` literal, prefer the bare-function form —
+TypeScript infers its `args` from `parameters`. A nested `caller(...)` call
+cannot get that inference (the inner generic call is resolved before the
+spec's schema type is fixed), so annotate the argument type there, or only
+use `caller`/`trusted` for standalone, reusable checks.
 
 ## `idempotency`
 

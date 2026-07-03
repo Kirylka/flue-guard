@@ -1,14 +1,16 @@
 /**
  * `flue-guard` — the golden path.
  *
- * Four concepts cover almost everything: `govern`, `caller`, `gov.tool`, and
- * `gov.run`. This entry point exports those, the core types, the error
- * taxonomy, and the adapter *interfaces* you implement to customize a seam.
+ * Three concepts cover almost everything: `govern`, `gov.tool`, and
+ * `gov.run`. This entry point exports those, the `caller`/`trusted` authorize
+ * helpers, the core types, the error taxonomy, and the adapter *interfaces*
+ * you implement to customize a seam.
  *
  * The built-in adapter implementations, hashing/verification utilities, and
  * test doubles live on subpaths so they don't crowd the root surface:
  *   - `flue-guard/audit`     — hashEntry, verifyChain, audit-log impls
  *   - `flue-guard/adapters`  — default RBAC/redaction/idempotency, toFlueTool
+ *   - `flue-guard/d1`        — Cloudflare D1 audit log + idempotency store
  *   - `flue-guard/testing`   — in-memory test doubles
  *
  * ESM-only. Node 22+.
@@ -24,6 +26,7 @@ export type {
   GovernedToolSpec,
   GovernedFlueToolSpec,
   AuthorizeSpec,
+  AuthorizeCheck,
   TrustedSource,
   FlueDefineTool,
 } from "./toolkit.js";

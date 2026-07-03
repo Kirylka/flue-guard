@@ -15,7 +15,6 @@
 import {
   GovernanceConfigError,
   createGovernedToolkit,
-  caller,
   type ApprovalAdapter,
   type FlueCompatibleTool,
   type TrustedContext,
@@ -81,7 +80,7 @@ const resetPassword = toolkit.defineGovernedTool<{ accountId: string }>({
   description: "Send a password reset link for an account.",
   sideEffect: true,
   // The check High Touch Support never made: caller must control the account.
-  authorize: caller((a, ctx) => accounts.isControlledBy(a.accountId, ctx.actor.id)),
+  authorize: (a, ctx) => accounts.isControlledBy(a.accountId, ctx.actor.id),
   idempotency: { key: (a) => `reset:${a.accountId}` },
   execute: (a) => {
     accounts.sendResetLink(a.accountId);

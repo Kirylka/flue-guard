@@ -76,7 +76,7 @@ nothing trusted) has no shape you can write.
 
 ```ts
 import * as v from "valibot";
-import { govern, caller } from "flue-guard";
+import { govern } from "flue-guard";
 
 declare const accounts: { ownedBy(accountId: string, actorId: string): Promise<boolean> };
 
@@ -87,19 +87,17 @@ export const closeAccount = gov.tool({
   description: "Close an account the caller owns.",
   parameters: v.object({ accountId: v.string() }),
   sideEffect: true,
-  authorize: caller(
-    (a: { accountId: string }, ctx) => accounts.ownedBy(a.accountId, ctx.actor.id),
-  ),
+  authorize: (a, ctx) => accounts.ownedBy(a.accountId, ctx.actor.id),
   execute: async (a) => ({ closed: a.accountId }),
 });
 ```
 
-::: tip Annotate the argument type
-TypeScript cannot infer `caller`'s argument type from the surrounding
-`gov.tool` literal (the helper call is resolved before `parameters` is), so
-state it: `caller((a: { accountId: string }, ctx) => …)`. The plain-object
-form `authorize: { anchor: "caller", check: (a, ctx) => … }` infers fully if
-you prefer zero annotations.
+::: tip Bare function = caller anchor
+A plain `(args, ctx) => boolean` is shorthand for `caller(check)`, and it is
+the form to prefer inline: `args` is inferred from `parameters`, so no
+annotation is needed. Reach for `caller(...)` when you define the check
+standalone (outside a tool literal, where there is nothing to infer from) and
+`trusted(...)` for source-anchored checks.
 :::
 
 **Anchor 2: a registered trusted source.** For anonymous-recovery flows where
@@ -144,7 +142,7 @@ uses each for what it's best at:
 
 ```ts
 import * as v from "valibot";
-import { govern, caller } from "flue-guard";
+import { govern } from "flue-guard";
 
 declare const accounts: { ownedBy(accountId: string, actorId: string): Promise<boolean> };
 declare const registrar: { transfer(accountId: string, to: string): Promise<void> };
@@ -158,9 +156,8 @@ export const transferDomain = gov.tool({
   sideEffect: true,
   requireRoles: ["account_admin"],                    // coarse: who may ever call this
   scope: (a) => `account:${a.accountId}`,             // territory: within the caller's grants
-  authorize: caller(                                  // ownership: this caller, this account
-    (a: { accountId: string }, ctx) => accounts.ownedBy(a.accountId, ctx.actor.id),
-  ),
+  authorize: (a, ctx) =>                              // ownership: this caller, this account
+    accounts.ownedBy(a.accountId, ctx.actor.id),
   approval: true,                                     // and a human signs off
   execute: async (a) => registrar.transfer(a.accountId, a.to),
 });

@@ -82,6 +82,22 @@ export type AuthorizeSpec<TArgs> =
     };
 
 /**
+ * A caller-anchored authorization check, usable directly as `authorize` —
+ * shorthand for `caller(check)`. Written inline in a tool spec, `args` is
+ * contextually typed from the tool's `parameters`, so no annotation is needed
+ * (a nested `caller(...)` call can't get that inference — TypeScript resolves
+ * the inner generic call before the spec's schema type is fixed):
+ *
+ * ```ts
+ * authorize: (a, ctx) => accounts.ownedBy(a.accountId, ctx.actor.id)
+ * ```
+ */
+export type AuthorizeCheck<TArgs> = (
+  args: TArgs,
+  ctx: ExecutionContext,
+) => boolean | Promise<boolean>;
+
+/**
  * Authorize keyed to the authenticated caller. The check receives the trusted
  * execution context — key the decision to `ctx.actor`. Prefer this helper over
  * the raw object: `args` is inferred (it's pinned by the tool's `parameters`),
@@ -134,9 +150,11 @@ export interface GovernedToolSpec<TArgs, TResult> {
   /**
    * Authorization for "is this caller allowed to do this to this target?",
    * keyed to a declared trusted anchor (caller identity or a trusted source).
-   * See {@link AuthorizeSpec}.
+   * A bare function is the caller-anchored form with `args` inferred from
+   * `parameters` (see {@link AuthorizeCheck}); `caller(...)` / `trusted(...)`
+   * are the explicit forms. See {@link AuthorizeSpec}.
    */
-  authorize?: AuthorizeSpec<TArgs>;
+  authorize?: AuthorizeSpec<TArgs> | AuthorizeCheck<TArgs>;
   /**
    * Idempotency policy for side-effectful writes. `key` must return a stable,
    * non-empty string (an empty key is rejected, not treated as "no
@@ -401,17 +419,23 @@ export function createGovernedToolkit(
       spec: GovernedToolSpec<TArgs, TResult>,
     ): FlueCompatibleTool {
     // `authorize` is keyed to a declared anchor (caller or a trusted source),
-    // so there's no arg-only shape to reject. We only check that a referenced
-    // trusted source actually exists.
+    // so there's no arg-only shape to reject. A bare function is the
+    // caller-anchored form (it receives the trusted execution context);
+    // normalize it once so the pipeline sees a single shape. We only check
+    // that a referenced trusted source actually exists.
+    const authorize: AuthorizeSpec<TArgs> | undefined =
+      typeof spec.authorize === "function"
+        ? { anchor: "caller", check: spec.authorize }
+        : spec.authorize;
     if (
-      spec.authorize &&
-      typeof spec.authorize.anchor === "object" &&
-      !(spec.authorize.anchor.trustedSource in (options.trustedSources ?? {}))
+      authorize &&
+      typeof authorize.anchor === "object" &&
+      !(authorize.anchor.trustedSource in (options.trustedSources ?? {}))
     ) {
       throw new GovernanceConfigError(
         spec.name,
         `authorize for "${spec.name}" references unknown trusted source ` +
-          `"${spec.authorize.anchor.trustedSource}". Register it in ` +
+          `"${authorize.anchor.trustedSource}". Register it in ` +
           "createGovernedToolkit({ trustedSources }).",
       );
     }
@@ -431,7 +455,7 @@ export function createGovernedToolkit(
       !spec.unsafeAllowUnauthorized &&
       (spec.kind ?? "scoped") === "scoped" &&
       Boolean(spec.scope) &&
-      !spec.authorize &&
+      !authorize &&
       (spec.requireRoles?.length ?? 0) === 0 &&
       !approvalGates;
 
@@ -455,7 +479,7 @@ export function createGovernedToolkit(
       } else {
         const gated =
           Boolean(spec.scope) ||
-          Boolean(spec.authorize) ||
+          Boolean(authorize) ||
           (spec.requireRoles?.length ?? 0) > 0 ||
           approvalGates;
         if (!gated) {
@@ -585,8 +609,8 @@ export function createGovernedToolkit(
         }
 
         // 5. Authorization, keyed to a declared trusted anchor.
-        if (spec.authorize) {
-          const a = spec.authorize;
+        if (authorize) {
+          const a = authorize;
           const ok =
             a.anchor === "caller"
               ? await a.check(args, execCtx)

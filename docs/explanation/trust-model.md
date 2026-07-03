@@ -46,8 +46,8 @@ to a declared anchor (the caller, or a registered server-side source), so
 
 ## Not guaranteed, on purpose
 
-- Your predicates' correctness. `authorize: caller((a, ctx) =>
-  accounts.ownedBy(a.accountId, ctx.actor.id))` is your business logic;
+- Your predicates' correctness. `authorize: (a, ctx) =>
+  accounts.ownedBy(a.accountId, ctx.actor.id)` is your business logic;
   flue-guard guarantees it runs before the side effect and that its verdict
   is recorded, never that it is right.
 - Containment of what `execute` does. Gates run before the handler; they

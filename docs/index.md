@@ -40,7 +40,7 @@ comparing the two, then written to a hash-chained receipt.
 
 ```ts
 import * as v from "valibot";
-import { govern, caller } from "flue-guard";
+import { govern } from "flue-guard";
 
 declare const accounts: {
   ownedBy(accountId: string, actorId: string): Promise<boolean>;
@@ -54,10 +54,8 @@ export const resetPassword = gov.tool({
   description: "Send a password reset link.",
   parameters: v.object({ accountId: v.string() }),
   sideEffect: true,
-  // The check that was missing in the Meta incident:
-  authorize: caller(
-    (a: { accountId: string }, ctx) => accounts.ownedBy(a.accountId, ctx.actor.id),
-  ),
+  // The check that was missing in the Meta incident (args inferred):
+  authorize: (a, ctx) => accounts.ownedBy(a.accountId, ctx.actor.id),
   idempotency: { key: (a) => `reset:${a.accountId}` }, // a retry won't send twice
   execute: async (a) => {
     await accounts.sendResetLink(a.accountId);

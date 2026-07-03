@@ -23,7 +23,7 @@ Create `first-tool.ts`:
 ```ts
 // first-tool.ts
 import * as v from "valibot";
-import { govern, caller, isGovernanceDenial } from "flue-guard";
+import { govern, isGovernanceDenial } from "flue-guard";
 import { HashChainAuditLog } from "flue-guard/audit";
 
 // A stand-in account store. This mapping is the server-side truth;
@@ -42,9 +42,8 @@ const resetPassword = gov.tool({
   parameters: v.object({ accountId: v.string() }),
   sideEffect: true,
   // The authorization gate: the caller must own the account they name.
-  authorize: caller(
-    (a: { accountId: string }, ctx) => owners.get(a.accountId) === ctx.actor.id,
-  ),
+  // (`a` is inferred from `parameters` — no annotation needed.)
+  authorize: (a, ctx) => owners.get(a.accountId) === ctx.actor.id,
   execute: async (a) => {
     console.log(`  [side effect] reset link sent for ${a.accountId}`);
     return `Sent a reset link for ${a.accountId}.`;
