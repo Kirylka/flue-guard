@@ -167,6 +167,24 @@ export type AuditInput = Omit<AuditEntryBody, "seq" | "prevHash" | "ts"> & {
   ts?: string;
 };
 
+/**
+ * Seal an entry body into a full {@link AuditEntry}: normalize it exactly
+ * once, hash that normalized value, and return them together. The returned
+ * entry is JSON-safe (bigint/circular/deep values are already normalized) and
+ * can never disagree with its own hash — a getter is read only once. This is
+ * the building block for every {@link AuditLog} implementation, including
+ * custom store-backed sinks: fill in `seq`/`prevHash`/`ts`, seal, persist.
+ */
+export async function sealEntry(
+  body: AuditEntryBody,
+  hmacKey?: string,
+): Promise<AuditEntry> {
+  assertHmacKey(hmacKey);
+  const normalized = canonicalize(body) as AuditEntryBody;
+  const hash = await hashCanonical(normalized, hmacKey);
+  return { ...normalized, hash };
+}
+
 export interface AuditLog {
   /** Append an entry and return the fully-populated, hashed record. */
   append(input: AuditInput): Promise<AuditEntry>;
@@ -206,7 +224,7 @@ export async function verifyChain(
  * concurrent appends must not interleave or they would share a sequence and a
  * parent hash and break the chain. Each append waits for the previous to settle.
  */
-class AppendQueue {
+export class AppendQueue {
   private tail: Promise<unknown> = Promise.resolve();
 
   run<T>(task: () => Promise<T>): Promise<T> {
@@ -240,13 +258,7 @@ export class InMemoryAuditLog implements AuditLog {
         prevHash: prev ? prev.hash : GENESIS_HASH,
         ts: input.ts ?? new Date().toISOString(),
       };
-      // Normalize exactly once, then hash and store that same value: the stored
-      // entry is JSON-safe (bigint/circular/deep results can't be persisted
-      // otherwise) and can never disagree with its own hash (a getter is read
-      // once).
-      const normalized = canonicalize(body) as AuditEntryBody;
-      const hash = await hashCanonical(normalized, this.hmacKey);
-      const entry: AuditEntry = { ...normalized, hash };
+      const entry = await sealEntry(body, this.hmacKey);
       this.log.push(entry);
       return entry;
     });
@@ -338,11 +350,7 @@ export class HashChainAuditLog implements AuditLog {
         prevHash: this.prevHash,
         ts: input.ts ?? new Date().toISOString(),
       };
-      // Normalize exactly once, then hash and persist that same value (see the
-      // note on InMemoryAuditLog.append).
-      const normalized = canonicalize(body) as AuditEntryBody;
-      const hash = await hashCanonical(normalized, this.hmacKey);
-      const entry: AuditEntry = { ...normalized, hash };
+      const entry = await sealEntry(body, this.hmacKey);
       fs.appendFileSync(this.path, JSON.stringify(entry) + "\n");
       this.seq += 1;
       this.prevHash = entry.hash;

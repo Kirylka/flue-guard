@@ -43,6 +43,10 @@
       "types": "./dist/src/adapters.d.ts",
       "import": "./dist/src/adapters.js"
     },
+    "./d1": {
+      "types": "./dist/src/d1.d.ts",
+      "import": "./dist/src/d1.js"
+    },
     "./testing": {
       "types": "./dist/src/testing.d.ts",
       "import": "./dist/src/testing.js"

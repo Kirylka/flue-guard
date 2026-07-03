@@ -28,26 +28,28 @@ filesystem-less runtime, but *using* a path there isn't. Hand the toolkit an
 `AuditLog` and an `IdempotencyStore` instead; nothing else changes:
 
 ```ts
-import { govern, type AuditLog, type IdempotencyStore } from "flue-guard";
+import { govern } from "flue-guard";
+import { D1AuditLog, D1IdempotencyStore, type D1Like } from "flue-guard/d1";
 
-declare const d1Audit: AuditLog;            // D1-backed (reference impl below)
-declare const kvIdempotency: IdempotencyStore; // KV-backed (reference impl below)
+declare const env: { DB: D1Like }; // your D1 binding
 
 const gov = govern({
-  audit: d1Audit,
-  idempotencyStore: kvIdempotency,
+  audit: new D1AuditLog({ db: env.DB }),
+  idempotencyStore: new D1IdempotencyStore({ db: env.DB }),
 });
 ```
 
-[`examples/cloudflare-adapters.ts`](https://github.com/Kirylka/flue-guard/blob/main/examples/cloudflare-adapters.ts)
-contains copy-pasteable reference implementations:
+Both ship on the `flue-guard/d1` subpath
+([reference](/reference/adapters#cloudflare-d1-flue-guard-d1)): the audit log
+gets the atomic append the chain needs across isolates (which a shared file
+cannot — the file sink is single-writer), and the idempotency store gets an
+atomic cross-instance claim. Add `auditTableSql()` / `idempotencyTableSql()`
+to your D1 migrations, or call `ensureSchema()` on each adapter at startup.
 
-- `D1AuditLog`, a D1-backed hash-chained `AuditLog`. D1 gives you the
-  atomic append the chain needs across isolates, which a shared file cannot
-  (the file sink is single-writer).
-- `KvIdempotencyStore`, a KV-backed `IdempotencyStore`. KV is eventually
-  consistent, so for **strict** at-most-once under concurrent same-key calls,
-  put the claim in a Durable Object (single-threaded per key) instead.
+Prefer KV for idempotency? A KV-backed reference store lives in
+[`examples/cloudflare-adapters.ts`](https://github.com/Kirylka/flue-guard/blob/main/examples/cloudflare-adapters.ts)
+— but KV is eventually consistent, so for **strict** at-most-once under
+concurrent same-key calls use D1 (above) or a Durable Object.
 
 ## 3. Bind context per invocation when Flue dispatches
 

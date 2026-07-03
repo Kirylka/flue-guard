@@ -14,5 +14,6 @@ export * from "../src/idempotency.js";
 export * from "../src/rbac.js";
 export * from "../src/approval.js";
 export * from "../src/flue.js";
+export * from "../src/d1.js";
 export * from "../src/toolkit.js";
 export * from "../src/govern.js";

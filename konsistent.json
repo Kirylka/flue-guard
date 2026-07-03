@@ -59,6 +59,19 @@
       }
     },
     {
+      "name": "d1-entry-exports",
+      "paths": "src/d1.ts",
+      "must": {
+        "export": [
+          "D1AuditLog",
+          "D1IdempotencyStore",
+          "auditTableSql",
+          "idempotencyTableSql"
+        ],
+        "exportTypes": ["D1Like", "D1PreparedStatementLike"]
+      }
+    },
+    {
       "name": "testing-entry-exports",
       "paths": "src/testing.ts",
       "must": { "export": ["InMemoryAuditLog", "InMemoryIdempotencyStore"] }

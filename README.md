@@ -24,7 +24,7 @@ npm i flue-guard @flue/runtime valibot
 ```ts
 import { defineAgent, type ToolDefinition } from "@flue/runtime";
 import * as v from "valibot";
-import { govern, caller } from "flue-guard";
+import { govern } from "flue-guard";
 
 // Stand-ins for your app's data layer and Flue session:
 declare const accounts: {
@@ -41,9 +41,8 @@ const resetPassword = gov.tool({
   parameters: v.object({ accountId: v.string() }),
   sideEffect: true,
   // The check the Meta incident was missing: caller must own the account.
-  authorize: caller(
-    (a: { accountId: string }, ctx) => accounts.ownedBy(a.accountId, ctx.actor.id),
-  ),
+  // (args are inferred from `parameters` — no annotation needed)
+  authorize: (a, ctx) => accounts.ownedBy(a.accountId, ctx.actor.id),
   // A retry replays the first result instead of sending a second link.
   idempotency: { key: (a) => `reset:${a.accountId}` },
   execute: async (a) => {
@@ -65,8 +64,7 @@ await gov.run(
 );
 ```
 
-That is the whole API for most uses: `govern`, `gov.tool`, `caller`,
-`gov.run`. The tool refuses to define without an authorization gate, checks
+That is the whole API for most uses: `govern`, `gov.tool`, `gov.run`. The tool refuses to define without an authorization gate, checks
 ownership before the side effect, won't fire twice on a retry, and writes a
 tamper-evident line for every call, denials included.
 
@@ -96,8 +94,8 @@ the model can never touch it.
   log's correlation index). Build them from stable ids, never from secrets
   or PII.
 - The file audit sink is single-writer: one process, one instance. For
-  multi-instance deployments use a store-backed sink such as the
-  [D1 reference adapter](https://github.com/Kirylka/flue-guard/blob/main/examples/cloudflare-adapters.ts).
+  multi-instance deployments use the store-backed adapters in
+  `flue-guard/d1` (Cloudflare D1, or any D1-shaped SQLite binding).
 
 ## Entry points
 
@@ -106,6 +104,7 @@ the model can never touch it.
 | `flue-guard` | `govern`, `createGovernedToolkit`, `caller`, `trusted`, core types, the error taxonomy, adapter **interfaces** |
 | `flue-guard/audit` | `hashEntry`, `verifyChain`, `HashChainAuditLog`, `InMemoryAuditLog` |
 | `flue-guard/adapters` | default RBAC / redaction / idempotency, scope helpers, `toFlueTool` |
+| `flue-guard/d1` | `D1AuditLog`, `D1IdempotencyStore` — multi-instance store-backed adapters (Cloudflare D1) |
 | `flue-guard/testing` | in-memory test doubles |
 
 `govern()` is the way in. `createGovernedToolkit` is the explicit form of the

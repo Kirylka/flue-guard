@@ -3,7 +3,7 @@
 flue-guard is ESM-only, requires Node >= 22.19, and declares peer
 dependencies `@flue/runtime >=1.0.0-beta.9 <1.0.0` and `valibot ^1.0.0`.
 
-Four import paths. The root carries the golden path, the types, and the
+Five import paths. The root carries the golden path, the types, and the
 adapter *interfaces*; implementations live on subpaths so they don't crowd it.
 
 | Import | Contents |
@@ -11,6 +11,7 @@ adapter *interfaces*; implementations live on subpaths so they don't crowd it.
 | `flue-guard` | `govern`, `createGovernedToolkit`, `caller`, `trusted`, `always`, `never`, `ContextStore`, the error taxonomy, core types, adapter interfaces |
 | `flue-guard/audit` | `HashChainAuditLog`, `InMemoryAuditLog`, `hashEntry`, `verifyChain`, `GENESIS_HASH` |
 | `flue-guard/adapters` | Built-in adapter implementations and helpers: `defaultRbac`, `autoApprove`, redactors, `InMemoryIdempotencyStore`, scope matchers, `toFlueTool`, `hostContextResolver` |
+| `flue-guard/d1` | `D1AuditLog`, `D1IdempotencyStore` — store-backed adapters for Cloudflare D1 (multi-instance safe) |
 | `flue-guard/testing` | `InMemoryAuditLog`, `InMemoryIdempotencyStore` (re-exported test doubles) |
 
 ## `flue-guard` (root)
@@ -34,7 +35,7 @@ adapter *interfaces*; implementations live on subpaths so they don't crowd it.
 | `GovernOptions`, `GovernedToolkitOptions` | Options for `govern` / `createGovernedToolkit` |
 | `GovernedToolkit` | The toolkit: `tool`, `defineGovernedTool`, `withContext`, `run`, `current`, `peek` |
 | `GovernedToolSpec`, `GovernedFlueToolSpec` | The tool spec (explicit-generic and schema-inferred forms) |
-| `AuthorizeSpec`, `TrustedSource` | Authorization gate shapes |
+| `AuthorizeSpec`, `AuthorizeCheck`, `TrustedSource` | Authorization gate shapes |
 | `TrustedContext`, `ExecutionContext` | The context your app binds / the one handlers receive |
 | `ContextResolver` | `(hostContext?) => TrustedContext \| Promise<TrustedContext>` |
 | `Decision`, `Outcome` | Audit vocabulary: `allow\|deny\|defer`, `executing\|success\|error\|denied\|replayed\|pending` |
@@ -74,6 +75,19 @@ Details: [Audit log reference](/reference/audit-log).
 | `hostContextResolver(extract)` | Context resolver for non-Flue hosts that pass a context object |
 
 Details: [Adapters reference](/reference/adapters).
+
+## `flue-guard/d1`
+
+| Export | Description |
+| --- | --- |
+| `D1AuditLog` | Hash-chained audit log in a D1 table; safe across instances (appends race on the `seq` primary key and the loser retries, so the chain never forks) |
+| `D1IdempotencyStore` | Idempotency store with an atomic cross-instance claim (`INSERT … ON CONFLICT DO NOTHING`) |
+| `auditTableSql(table?)` / `idempotencyTableSql(table?)` | DDL strings for your D1 migrations (or call `ensureSchema()` on either adapter) |
+| `D1Like`, `D1PreparedStatementLike` | The structural slice of the D1 API the adapters need — no Cloudflare types required |
+
+Works with any D1-shaped SQLite binding. Details:
+[Adapters reference](/reference/adapters#cloudflare-d1-flue-guard-d1) and
+[Run on Cloudflare Workers](/guides/cloudflare-workers).
 
 ## `flue-guard/testing`
 

@@ -74,6 +74,40 @@ The built-in `InMemoryIdempotencyStore` (also on `flue-guard/testing`)
 accepts an injectable `clock` for tests. Keys arrive already namespaced per
 tool; records are namespaced per tenant by the `tenantId` argument.
 
+## Cloudflare D1 (`flue-guard/d1`)
+
+The store-backed production counterparts of both defaults, for Cloudflare D1
+or any D1-shaped SQLite binding — written against a minimal structural slice
+(`D1Like`), so no Cloudflare types are required:
+
+```ts
+import { govern } from "flue-guard";
+import { D1AuditLog, D1IdempotencyStore, type D1Like } from "flue-guard/d1";
+
+declare const env: { DB: D1Like }; // your Worker binding
+
+const gov = govern({
+  audit: new D1AuditLog({ db: env.DB, hmacKey: "from-your-secret-store" }),
+  idempotencyStore: new D1IdempotencyStore({ db: env.DB }),
+});
+```
+
+- `D1AuditLog` is **multi-instance safe**: every append reads the head and
+  inserts `seq + 1` as the primary key, so concurrent writers race on `seq`,
+  the loser re-reads and retries, and the chain can never fork. Verify with
+  the same `verifyChain` as every other log.
+- `D1IdempotencyStore` claims a key with a single conditional
+  `INSERT … ON CONFLICT DO NOTHING` — an **atomic cross-instance claim** —
+  and retakes failed/TTL-expired records with a guarded `UPDATE`, so
+  concurrent retries elect exactly one winner. Same semantics as the
+  in-memory store otherwise (an in-flight claim never expires by TTL).
+- Schema: put `auditTableSql()` / `idempotencyTableSql()` in your D1
+  migrations, or call `ensureSchema()` on either adapter at startup.
+- Results are persisted as JSON. That is already the contract for governed
+  tools under Flue (Flue rejects non-JSON-plain results), and a
+  non-serializable result fails `complete()` — recorded as a gap, retried as
+  a conflict, never as a duplicate.
+
 ## `RbacAdapter`
 
 ```ts
