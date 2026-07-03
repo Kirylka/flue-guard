@@ -15,6 +15,7 @@ export default defineConfig({
     "adapters.md",
     "examples.md",
     "**/BUSINESS_REQUIREMENTS.md",
+    "**/FLUE_STABLE_PLAN.md",
     "**/FUNCTIONAL_REQUIREMENTS.md",
     "**/MANIFEST_SPEC.md",
     "**/TASK_SPECS.md",

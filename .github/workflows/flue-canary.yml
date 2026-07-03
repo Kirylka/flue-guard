@@ -1,0 +1,43 @@
+# Early-warning canary for Flue contract drift — the "know before 1.0 lands"
+# half of docs/FLUE_STABLE_PLAN.md.
+#
+# Weekly (and on demand), install the newest @flue/runtime on its `latest` and
+# `next` dist-tags — deliberately ignoring our peer range — and run the full
+# suite plus the live spike against it. A red run here means the tool contract
+# moved (or 1.0 shipped) and the day-0 checklist in the plan doc applies. It
+# gates nothing: CI for PRs stays pinned to the tested beta line.
+
+name: flue-canary
+
+on:
+  schedule:
+    - cron: "23 6 * * 1" # Mondays 06:23 UTC
+  workflow_dispatch:
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - flue-tag: latest
+          # `next` may not exist as a dist-tag; don't let that read as drift.
+          - flue-tag: next
+            may-fail: true
+    name: "@flue/runtime@${{ matrix.flue-tag }}"
+    continue-on-error: ${{ matrix.may-fail == true }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # --force: this is the whole point of the canary — install a version our
+      # peer range doesn't admit yet, and find out whether it breaks us.
+      - run: npm install --no-save --force "@flue/runtime@${{ matrix.flue-tag }}"
+      - name: Report the version under test
+        run: node -p "'@flue/runtime ' + require('./node_modules/@flue/runtime/package.json').version"
+      - run: npm test
+      - run: npm run spike
