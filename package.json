@@ -47,7 +47,11 @@
       "types": "./dist/src/testing.d.ts",
       "import": "./dist/src/testing.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./jev": {
+      "types": "./dist/src/jev.d.ts",
+      "import": "./dist/src/jev.js"
+    }
   },
   "files": [
     "dist/src",
@@ -72,22 +76,32 @@
     "docs:preview": "vitepress preview docs",
     "docs:check-samples": "node scripts/check-doc-samples.mjs",
     "prepack": "npm run build",
-    "prepublishOnly": "npm run build && npm test"
+    "prepublishOnly": "npm run build && npm test",
+    "test:package": "npm run build && node scripts/check-package.mjs",
+    "eval:jev": "npm run build && node --env-file-if-exists=.env.local dist/examples/jev-evaluation.js",
+    "spike:jev": "npm run build && node scripts/jev-faux-spike.mjs"
   },
   "peerDependencies": {
     "@flue/runtime": "^2.0.8",
-    "valibot": "^1.0.0"
+    "valibot": "^1.0.0",
+    "@typesafe-ai/sdk": "^0.6.0"
   },
   "devDependencies": {
     "@earendil-works/pi-ai": "^0.83.0",
     "@eslint/js": "^10.0.1",
     "@flue/runtime": "^2.0.8",
     "@types/node": "^22.0.0",
+    "@typesafe-ai/sdk": "^0.6.0",
     "eslint": "^10.6.0",
     "konsistent": "1.0.0-beta.1",
     "typescript": "^5.5.0",
     "typescript-eslint": "^8.62.1",
     "valibot": "^1.4.1",
     "vitepress": "^1.6.4"
+  },
+  "peerDependenciesMeta": {
+    "@typesafe-ai/sdk": {
+      "optional": true
+    }
   }
 }

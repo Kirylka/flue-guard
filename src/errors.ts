@@ -13,6 +13,8 @@ export type GovernanceErrorCode =
   | "access_denied"
   | "scope_violation"
   | "authorization_denied"
+  | "guard_denied"
+  | "guard_unavailable"
   | "approval_denied"
   | "approval_pending"
   | "idempotency_conflict"
@@ -93,6 +95,20 @@ export class AuthorizationDeniedError extends GovernanceError {
   }
 }
 
+/** The semantic guard refused the proposed action. */
+export class GuardDeniedError extends GovernanceError {
+  constructor(tool: string) {
+    super("guard_denied", `The guard denied "${tool}".`, tool);
+  }
+}
+
+/** Assessment failed or timed out; the tool must not execute. */
+export class GuardUnavailableError extends GovernanceError {
+  constructor(tool: string) {
+    super("guard_unavailable", `The guard could not assess "${tool}". Execution was blocked.`, tool);
+  }
+}
+
 /**
  * A governed tool was defined unsafely — e.g. a side-effecting tool with no
  * authorization gate. Thrown at definition time, not per call.
@@ -152,7 +168,8 @@ export class IdempotencyConflictError extends GovernanceError {
 
 /**
  * Codes that mean governance *refused* the call. Excludes `approval_pending`
- * (a suspend signal, not a denial) and `config_error` (a bug in the tool's
+ * (a suspend signal, not a denial), `guard_unavailable` (assessment failure),
+ * and `config_error` (a bug in the tool's
  * definition or the toolkit's wiring — usually thrown at definition time,
  * occasionally at call time when it can only be detected then, e.g. an
  * idempotency key function returning an empty key).
@@ -162,6 +179,7 @@ const DENIAL_CODES: ReadonlySet<GovernanceErrorCode> = new Set([
   "access_denied",
   "scope_violation",
   "authorization_denied",
+  "guard_denied",
   "approval_denied",
   "idempotency_conflict",
 ]);
@@ -173,7 +191,7 @@ export function isGovernanceError(err: unknown): err is GovernanceError {
 
 /**
  * True when the governance layer refused the call (scope, authorization, RBAC,
- * approval denial, missing context, idempotency conflict) — i.e. the model
+ * guard/approval denial, missing context, idempotency conflict) — i.e. the model
  * should be told it isn't allowed, not that the tool failed. Excludes the
  * approval-pending suspend signal; use {@link isApprovalPending} for that.
  */

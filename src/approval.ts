@@ -11,6 +11,7 @@
  */
 
 import type { TrustedContext } from "./types.js";
+import type { GuardAssessment } from "./guard.js";
 
 export interface ApprovalRequest<TArgs = unknown> {
   tool: string;
@@ -18,6 +19,8 @@ export interface ApprovalRequest<TArgs = unknown> {
   ctx: TrustedContext;
   /** Why approval was triggered, e.g. "refund exceeds $50". */
   reason?: string;
+  /** Assessment for the approver; never replaces a required approval. */
+  assessment?: GuardAssessment;
 }
 
 export interface ApprovalDecision {

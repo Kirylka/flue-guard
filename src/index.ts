@@ -10,6 +10,7 @@
  *   - `flue-guard/audit`     — hashEntry, verifyChain, audit-log impls
  *   - `flue-guard/adapters`  — default RBAC/redaction/idempotency, toFlueTool
  *   - `flue-guard/testing`   — in-memory test doubles
+ *   - `flue-guard/jev`       — optional TypeSafe semantic guard
  *
  * ESM-only. Node 22+.
  */
@@ -42,6 +43,7 @@ export type {
   FnValidator,
 } from "./types.js";
 export type { FlueToolDefinition } from "./flue.js";
+export type { GuardAssessment, GuardRequest, ToolGuard } from "./guard.js";
 
 // --- Trusted-context propagation -------------------------------------------
 export { ContextStore } from "./context.js";

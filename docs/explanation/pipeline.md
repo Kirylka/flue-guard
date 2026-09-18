@@ -4,7 +4,7 @@ Every call to a governed tool runs the same fixed sequence. No step is
 skippable, the order never varies, and any step can stop the call.
 
 ```
-context -> validate -> RBAC -> scope -> authorize -> approval
+context -> validate -> RBAC -> scope -> authorize -> guard -> approval
         -> idempotency -> execute -> audit
 ```
 
@@ -23,14 +23,16 @@ context -> validate -> RBAC -> scope -> authorize -> approval
    it against what the context allows. This is the tenant-isolation step.
 5. **Authorize.** The per-call predicate, anchored to the caller or a
    registered trusted source. This is the ownership step.
-6. **Approval.** If the policy triggers, the adapter answers approve, deny,
+6. **Guard.** An optional semantic assessment allows, denies, or requires review.
+   Errors and timeouts block the call.
+7. **Approval.** If the policy triggers or the guard requires review, the adapter answers approve, deny,
    or pending; pending suspends the call before anything ran.
-7. **Idempotency.** The key is claimed atomically. A completed record within
+8. **Idempotency.** The key is claimed atomically. A completed record within
    TTL short-circuits to the stored result; an in-flight claim refuses the
    call.
-8. **Execute.** Your handler, with validated args and the
+9. **Execute.** Your handler, with validated args and the
    `ExecutionContext`.
-9. **Audit.** Interleaved with all of the above rather than last: each
+10. **Audit.** Interleaved with all of the above rather than last: each
    step's verdict is appended to the hash chain as it happens.
 
 The order encodes a policy: cheap, static checks run before expensive,
@@ -49,6 +51,7 @@ passed every gate on its first run and would have passed them again.
 | Any gate refused | `deny/denied`, with the error code |
 | Approval pending | `defer/pending`, with the adapter's `ref` |
 | Idempotent replay | `allow/replayed`, with the stored result |
+| Guard evaluation failed or timed out | `deny/error`, code `guard_unavailable` |
 | Governance step itself crashed | `deny/error`, code `governance_error: …` |
 
 Two invariants hold everywhere:

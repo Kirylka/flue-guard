@@ -11,6 +11,7 @@ import type {
   AuthorizeSpec,
   ExecutionContext,
   Redactor,
+  ToolGuard,
   TrustedContext,
 } from "flue-guard";
 
@@ -22,6 +23,7 @@ interface GovernedToolSpec<TArgs, TResult> {
   requireRoles?: string[];
   scope?: (args: TArgs, ctx: TrustedContext) => string | string[];
   authorize?: AuthorizeSpec<TArgs>;
+  guard?: ToolGuard<TArgs>;
   idempotency?: { key: (args: TArgs, ctx: TrustedContext) => string; ttlMs?: number };
   approval?: ApprovalPolicy<TArgs>;
   redact?: Redactor;
@@ -125,6 +127,19 @@ Note on typing: inside a `gov.tool` literal, TypeScript resolves the
 argument type (`caller((a: { accountId: string }, ctx) => …)`) or use the
 plain object form, which infers fully.
 
+## `guard`
+
+Optional `ToolGuard<TArgs>` with `evaluate({ tool, args, ctx })` and an optional
+`timeoutMs` (default 2,000). Runs after authorization and before approval.
+Returns `{ decision: "allow" | "deny" | "review", reasonCodes: string[], details?: Record<string, unknown> }`.
+Deny blocks, review requires approval, and allow preserves existing approval
+requirements. Errors, invalid assessments, cancellation, and timeouts block.
+A guard does not count as an authorization gate for side effects.
+
+Parsed args are cloned once with `structuredClone` before evaluation. The guard
+and `execute` receive that same mutable clone; other steps retain their inputs.
+See [Add a Jev guard](/guides/jev-guard) for the optional adapter and limitations.
+
 ## `idempotency`
 
 At-most-once execution per logical operation. `key` must return a stable,
@@ -146,13 +161,14 @@ type ApprovalPolicy<TArgs> =
 
 `true` (or `always(reason?)`) requires approval on every call; a predicate
 requires it when it returns `true` or a reason string; `false` (or `never()`)
-never does, and does not count as a gate. Requires an `ApprovalAdapter` on
+does not itself require approval, and does not count as a gate. A guard review
+still requires approval. Requires an `ApprovalAdapter` on
 the toolkit or the call is denied. See
 [Require human approval](/guides/require-approval).
 
 ## `redact`
 
-Per-tool override of the toolkit's redactor. Applied to args, results, and
+Per-tool override of the toolkit's redactor. Applied to args, results, guard assessments, and
 error strings before they are written to the audit log. Never applied to what
 the handler or the model receives.
 

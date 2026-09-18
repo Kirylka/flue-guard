@@ -7,3 +7,9 @@ audit*.jsonl
 .samples-check/
 docs/.vitepress/dist/
 docs/.vitepress/cache/
+
+.env
+.env.local
+jev-evaluation-report.json
+# Local research notes, not documentation
+notes/

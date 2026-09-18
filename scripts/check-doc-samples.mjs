@@ -58,6 +58,7 @@ fs.writeFileSync(
           "flue-guard/audit": ["src/audit.ts"],
           "flue-guard/adapters": ["src/adapters.ts"],
           "flue-guard/testing": ["src/testing.ts"],
+          "flue-guard/jev": ["src/jev.ts"],
         },
       },
       include: ["./**/*.ts"],

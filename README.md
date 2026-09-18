@@ -133,6 +133,7 @@ Agents use `'use agent'`, `useModel`, and `useTool`; see the
 | `flue-guard/audit` | `hashEntry`, `verifyChain`, `HashChainAuditLog`, `InMemoryAuditLog` |
 | `flue-guard/adapters` | default RBAC / redaction / idempotency, scope helpers, `toFlueTool` |
 | `flue-guard/testing` | in-memory test doubles |
+| `flue-guard/jev` | `createJevGuard` (experimental; needs `@typesafe-ai/sdk`) |
 
 `govern()` is the way in. `createGovernedToolkit` is the explicit form of the
 same toolkit, with Flue's `defineTool` injected by you instead of for you, for
@@ -150,6 +151,16 @@ npm run spike     # a real Flue dispatched turn with a faux model, no API key
 [`examples/audit-viewer.html`](./examples/audit-viewer.html) verifies an
 `audit.jsonl` hash chain in your browser and lets you tamper with a line to
 watch verification catch it.
+
+## Optional guard step (experimental Jev adapter)
+
+A tool can declare a `guard` that runs after authorization and before approval.
+It allows the call, denies it, or sends it to your approval adapter for review.
+Any guard error or timeout blocks the call. The `flue-guard/jev` adapter checks
+the proposed action against your written policy with TypeSafe's Jev model;
+install `@typesafe-ai/sdk` separately to use it. The adapter is experimental and
+its options may change. A guard never replaces `authorize`. See
+[Add a Jev guard](https://kirylka.github.io/flue-guard/guides/jev-guard).
 
 ## License
 

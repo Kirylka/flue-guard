@@ -9,3 +9,11 @@ test("governed tools enforce policy through Flue's real dispatched model loop", 
     timeout: 25000,
   });
 });
+
+
+test("Jev guard deny, review, resume and replay work through Flue's model loop", { timeout: 30000 }, async () => {
+  await promisify(execFile)(process.execPath, ["scripts/jev-faux-spike.mjs"], {
+    cwd: new URL("../../", import.meta.url),
+    timeout: 25000,
+  });
+});

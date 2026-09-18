@@ -7,7 +7,7 @@
  * returns wraps a tool spec so that every invocation runs through the same
  * deterministic pipeline before (and after) the real handler:
  *
- *   context -> validate -> RBAC -> scope -> authorize -> approval
+ *   context -> validate -> RBAC -> scope -> authorize -> guard -> approval
  *           -> idempotency -> execute -> audit
  *
  * Audit records: denials, replays, and approval-deferrals write a single
@@ -36,6 +36,7 @@ import {
   type ApprovalAdapter,
   type ApprovalPolicy,
 } from "./approval.js";
+import { evaluateGuard, guardTimeout, type GuardAssessment, type ToolGuard } from "./guard.js";
 import { defaultRedactor, type Redactor } from "./redaction.js";
 import { deniedScopes, normalizeScopes } from "./scope.js";
 import { toFlueTool, type FlueToolDefinition } from "./flue.js";
@@ -44,6 +45,8 @@ import {
   ApprovalDeniedError,
   ApprovalPendingError,
   AuthorizationDeniedError,
+  GuardDeniedError,
+  GuardUnavailableError,
   GovernanceConfigError,
   GovernanceError,
   IdempotencyConflictError,
@@ -137,6 +140,8 @@ export interface GovernedToolSpec<TArgs, TResult> {
    * See {@link AuthorizeSpec}.
    */
   authorize?: AuthorizeSpec<TArgs>;
+  /** Optional semantic gate, evaluated after authorization and before approval. */
+  guard?: ToolGuard<TArgs>;
   /**
    * Idempotency policy for side-effectful writes. `key` must return a stable,
    * non-empty string (an empty key is rejected, not treated as "no
@@ -470,9 +475,15 @@ export function createGovernedToolkit(
       }
     }
 
+    if (spec.guard) {
+      guardTimeout(spec.guard.timeoutMs, spec.name);
+      if (typeof spec.guard.evaluate !== "function") {
+        throw new GovernanceConfigError(spec.name, "guard.evaluate must be a function.");
+      }
+    }
     const validate = makeValidator(spec.parameters);
     const redactor = spec.redact ?? baseRedactor;
-    const audit = (input: AuditInput) =>
+    const appendAudit = (input: AuditInput) =>
       auditLog.append({
         ...input,
         ts: input.ts ?? timestamp(),
@@ -489,6 +500,11 @@ export function createGovernedToolkit(
       hostContext?: unknown,
       signal?: AbortSignal,
     ): Promise<unknown> => {
+      let assessment: GuardAssessment | undefined;
+      const audit = (input: AuditInput) => appendAudit({
+        ...input,
+        ...(assessment ? { guard: redactor(assessment) } : {}),
+      });
       // 1. Resolve trusted context (fail-closed; we still record the denial).
       let ctx: TrustedContext;
       try {
@@ -601,10 +617,32 @@ export function createGovernedToolkit(
           }
         }
 
-        // 6. Approval (only when a policy is declared and triggered).
+        // Clone only the guard/handler arguments; the other steps keep their inputs.
+        let executionArgs = args;
+        if (spec.guard) {
+          try {
+            executionArgs = structuredClone(args);
+            assessment = await evaluateGuard(spec.guard, {
+              tool: spec.name, args: executionArgs, ctx: execCtx,
+            });
+          } catch {
+            await audit({
+              ...base, decision: "deny", outcome: "error",
+              requestedScopes: requested, args: redactedArgs, error: "guard_unavailable",
+            });
+            audited = true;
+            throw new GuardUnavailableError(spec.name);
+          }
+          if (assessment.decision === "deny") {
+            await denyAudit("guard_denied");
+            throw new GuardDeniedError(spec.name);
+          }
+        }
+
+        // 6. Approval, required by either the existing policy or guard review.
         let approver: string | undefined;
         const approval = evaluateApproval(spec.approval, args, ctx);
-        if (approval.needed) {
+        if (approval.needed || assessment?.decision === "review") {
           if (!options.approval) {
             await denyAudit("approval_denied");
             throw new ApprovalDeniedError(
@@ -617,6 +655,7 @@ export function createGovernedToolkit(
             args,
             ctx,
             reason: approval.reason,
+            ...(assessment ? { assessment } : {}),
           });
           if (decision.pending) {
             // Suspend, don't block: record the deferral and let the harness
@@ -677,7 +716,7 @@ export function createGovernedToolkit(
           await writeIntent(idempotencyKey);
           let result: TResult;
           try {
-            result = await spec.execute(args, execCtx);
+            result = await spec.execute(executionArgs, execCtx);
           } catch (err) {
             await audit({
               ...base,
@@ -767,7 +806,7 @@ export function createGovernedToolkit(
 
           let result: TResult;
           try {
-            result = await spec.execute(args, execCtx);
+            result = await spec.execute(executionArgs, execCtx);
           } catch (err) {
             // The handler failed: the side effect did not complete, so release
             // the key for a clean retry.

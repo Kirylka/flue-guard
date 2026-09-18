@@ -6,7 +6,6 @@ export default defineConfig({
     "Governance layer for Flue tools: in-process authorization, idempotency, and tamper-evident audit.",
   base: "/flue-guard/",
   lastUpdated: true,
-  // Planning documents live in docs/ but are not site pages.
   srcExclude: [
     // Redirect stubs for links baked into already-published npm READMEs.
     "motivation.md",
@@ -14,12 +13,6 @@ export default defineConfig({
     "guide.md",
     "adapters.md",
     "examples.md",
-    "**/BUSINESS_REQUIREMENTS.md",
-    "**/FUNCTIONAL_REQUIREMENTS.md",
-    "**/MANIFEST_SPEC.md",
-    "**/TASK_SPECS.md",
-    "**/TECH_ARCHITECTURE.md",
-    "**/JEV_GUARD_DESIGN.md",
   ],
   themeConfig: {
     nav: [
@@ -46,6 +39,7 @@ export default defineConfig({
         text: "How-to guides",
         items: [
           { text: "Choose authorize vs scope", link: "/guides/authorize-vs-scope" },
+          { text: "Add a Jev guard", link: "/guides/jev-guard" },
           { text: "Require human approval", link: "/guides/require-approval" },
           { text: "Make retries safe", link: "/guides/safe-retries" },
           { text: "Verify & protect the audit log", link: "/guides/protect-the-audit-log" },

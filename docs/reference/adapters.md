@@ -97,7 +97,7 @@ role appears in `ctx.actor.roles`. A `false` answer throws
 ## `ApprovalAdapter`
 
 ```ts
-import type { TrustedContext } from "flue-guard";
+import type { TrustedContext, GuardAssessment } from "flue-guard";
 
 interface ApprovalAdapter {
   request(req: ApprovalRequest): Promise<ApprovalDecision>;
@@ -107,6 +107,7 @@ interface ApprovalRequest<TArgs = unknown> {
   tool: string;
   args: TArgs;
   ctx: TrustedContext;
+  assessment?: GuardAssessment; // completed guard assessment, when configured
   reason?: string; // why the policy triggered, e.g. "refund exceeds $50"
 }
 

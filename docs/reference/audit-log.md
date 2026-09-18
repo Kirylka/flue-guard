@@ -26,6 +26,7 @@ interface AuditEntry {
   idempotencyKey?: string;  // unredacted
   approver?: string;
   args?: unknown;           // after redaction
+  guard?: unknown;          // assessment after redaction, when completed
   result?: unknown;         // after redaction; present on success/replay
   error?: string;           // governance code or redacted message; on denial/error
   hash: string;             // SHA-256 (or HMAC-SHA256) of all fields above

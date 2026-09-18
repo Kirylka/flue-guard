@@ -69,6 +69,8 @@ export interface AuditEntry {
   args?: unknown;
   /** Redacted result, present on success/replay. */
   result?: unknown;
+  /** Guard assessment after audit redaction, when a guard completed. */
+  guard?: unknown;
   /** Error code or message, present on denial/error. */
   error?: string;
   /** SHA-256 of all fields above (canonicalized), including `prevHash`. */
