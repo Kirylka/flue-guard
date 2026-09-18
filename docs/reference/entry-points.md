@@ -1,7 +1,7 @@
 # Entry points
 
 flue-guard is ESM-only, requires Node >= 22.19, and declares peer
-dependencies `@flue/runtime >=1.0.0-beta.9 <1.0.0` and `valibot ^1.0.0`.
+dependencies `@flue/runtime ^2.0.8` and `valibot ^1.0.0`.
 
 Four import paths. The root carries the golden path, the types, and the
 adapter *interfaces*; implementations live on subpaths so they don't crowd it.

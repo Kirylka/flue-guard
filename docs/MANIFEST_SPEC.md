@@ -1,5 +1,7 @@
 # Governance Manifest — Spec
 
+> Historical design document: Flue API examples below describe the original beta integration. For the supported Flue 2 contract, see [the toolkit reference](./reference/toolkit.md) and [the current quickstart](../README.md).
+
 **Status:** Design (not yet implemented). Depends on the declarative-anchor
 change (§3) and the idempotency-guarantee self-report (§5).
 **Slots beside:** `TECH_ARCHITECTURE.md`, `TASK_SPECS.md`.

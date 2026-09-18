@@ -119,10 +119,11 @@ and addressable agents, where tool calls run detached from your caller and
 
 ### `toolkit.run(context, fn)`
 
-Binds `context` (via the toolkit's `ContextStore`) for everything `fn`
-triggers, including every governed tool call inside an awaited agent prompt.
-Call it once at your request boundary. Unavailable when the toolkit was
-constructed with a custom resolver function.
+Binds `context` (via the toolkit's `ContextStore`) for governed tools executing
+inside `fn`. It does not reach detached execution from `dispatch()` or
+`init().dispatch()`, even if the caller subsequently awaits the reply; use
+`withContext` inside those agents. Unavailable when the toolkit was constructed
+with a custom resolver function.
 
 ### `toolkit.current()` / `toolkit.peek()`
 

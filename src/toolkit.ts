@@ -246,7 +246,8 @@ export interface GovernedToolkit {
    * given resolver) instead of the ambient one. Use this for Flue's dispatched
    * / addressable-agent pattern, where tool calls run detached from the caller
    * so `ContextStore` (AsyncLocalStorage) can't reach them: bind the context
-   * per invocation inside `defineAgent`, derived from `ctx.payload`/`ctx.env`.
+   * per render inside the agent function, derived from authenticated
+   * `useDelivery()` signal attributes.
    * All other collaborators (audit, idempotency, adapters) are shared.
    */
   withContext(context: TrustedContext | ContextResolver): GovernedToolkit;
@@ -261,8 +262,8 @@ export interface GovernedToolkit {
   ): FlueToolDefinition;
   /**
    * Bind the trusted context for `fn` (and every governed tool it triggers)
-   * using the toolkit's built-in `ContextStore`. The edge-boundary call:
-   * `await toolkit.run(trustedContext, () => harness.prompt(text))`. Unavailable
+   * using the toolkit's built-in `ContextStore`. Only applies to tools that
+   * execute within the callback; detached dispatch needs `withContext`. Unavailable
    * if you constructed the toolkit with a custom resolver function.
    */
   run<T>(context: TrustedContext, fn: () => T): T;

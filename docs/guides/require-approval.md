@@ -87,7 +87,7 @@ side effect has run, and the deferral is written to the audit log as
 
 ## Catch the suspension, park the run, resume
 
-At the boundary where you drive the agent, treat the pending signal
+When invoking governed tools directly, treat the pending signal
 differently from a refusal:
 
 ```ts
@@ -95,11 +95,11 @@ import { isApprovalPending, isGovernanceDenial, type GovernedToolkit, type Trust
 
 declare const gov: GovernedToolkit;
 declare const trustedCtx: TrustedContext;
-declare const session: { prompt(text: string): Promise<unknown> };
+declare const executeGovernedTools: () => Promise<unknown>;
 declare const parkRun: (approvalRef: string | undefined) => Promise<void>;
 
 try {
-  await gov.run(trustedCtx, () => session.prompt("refund order 812, $120"));
+  await gov.run(trustedCtx, executeGovernedTools);
 } catch (err) {
   if (isApprovalPending(err)) {
     // err.ref is your adapter's handle (the ticket id).
@@ -116,8 +116,14 @@ try {
 
 Resuming **re-invokes the tool**: the whole pipeline runs again and the
 adapter is consulted again. This time the ticket is `approved` or `rejected`
-and it answers for real. Flue can persist and resume sessions; the re-invoked
-call is indistinguishable from the first, by design.
+and it answers for real. Bind the approval to the same actor, tenant, tool,
+and arguments so it cannot authorize a different action.
+
+Flue 2 converts thrown tool errors into model-visible errors. Throwing
+`ApprovalPendingError` does not automatically pause a dispatched agent. Your
+host must persist the approval request and deliver a new authenticated signal
+after resolution; the direct-call catch above does not intercept errors inside
+a detached model loop.
 
 Two consequences of the re-invoke model:
 

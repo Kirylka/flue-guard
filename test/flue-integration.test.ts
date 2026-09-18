@@ -1,12 +1,5 @@
-/**
- * Real integration test against @flue/runtime (v1.0.0-beta.9) and valibot.
- *
- * This does NOT mock Flue: it builds a governed tool and runs it through Flue's
- * actual `defineTool`, which (as of beta.3) requires the `input`/`output`/`run`
- * contract and rejects the legacy `parameters`/`execute` shape with
- * `ToolLegacyDefinitionError`. It proves the emitted tool is accepted, exposes
- * the real Valibot `input` schema Flue validates against, and routes `run(...)`
- * through our governance pipeline end to end.
+/** Integration with Flue 2's real defineTool and Valibot schemas.
+ * Full model-loop coverage lives in flue-runtime.test.ts.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -24,7 +17,7 @@ import {
 // Flue's generic `defineTool` is structurally compatible with the dependency-free
 // `FlueDefineTool` seam (the same cast `govern()` performs in production). This
 // still runs the REAL `defineTool` at call time — proving it accepts our tool
-// and never throws `ToolLegacyDefinitionError`.
+// with the current runtime contract.
 const defineFlueTool = defineTool as unknown as FlueDefineTool;
 import { GovernanceConfigError, ScopeViolationError } from "../src/errors.js";
 import type { TrustedContext } from "../src/types.js";
@@ -63,7 +56,9 @@ function build() {
   });
 
   // The real Flue normalization step.
-  const tool = defineFlueTool(toFlueTool(governed));
+  const definition = toFlueTool(governed);
+  defineTool(definition); // Compile-check and normalize without a consumer cast.
+  const tool = defineFlueTool(definition);
   return { ctx, audit, tool, refunds: () => refunds };
 }
 
@@ -89,10 +84,10 @@ test("Flue defineTool accepts the governed tool and preserves name/description/i
 test("valid call: governance runs and returns the structured result", async () => {
   const app = build();
   const out = await app.ctx.run(acme, () =>
-    app.tool.run({ input: { customerId: "c-100", amount: 40, refundId: "r-1" } }),
+    app.tool.run({ data: { customerId: "c-100", amount: 40, refundId: "r-1" } }),
   );
-  assert.equal(typeof out, "string");
-  assert.match(out as string, /refunded \$40 to c-100 for acme/);
+  assert.equal(typeof out.output, "string");
+  assert.match(out.output as string, /refunded \$40 to c-100 for acme/);
   assert.equal(app.refunds(), 1);
 });
 
@@ -114,7 +109,7 @@ test("out-of-scope call is blocked by governance even with valid args", async ()
     await assert.rejects(
       () =>
         app.tool.run({
-          input: { customerId: "c-999", amount: 10, refundId: "r-2" },
+          data: { customerId: "c-999", amount: 10, refundId: "r-2" },
         }),
       ScopeViolationError,
     );
@@ -126,12 +121,12 @@ test("duplicate refund replays through the real tool; side effect runs once", as
   const app = build();
   await app.ctx.run(acme, async () => {
     const a = await app.tool.run({
-      input: { customerId: "c-100", amount: 40, refundId: "r-1" },
+      data: { customerId: "c-100", amount: 40, refundId: "r-1" },
     });
     const b = await app.tool.run({
-      input: { customerId: "c-100", amount: 40, refundId: "r-1" },
+      data: { customerId: "c-100", amount: 40, refundId: "r-1" },
     });
-    assert.equal(a, b);
+    assert.deepEqual(a, b);
   });
   assert.equal(app.refunds(), 1);
 
@@ -163,9 +158,9 @@ test("toolkit.tool() one-call helper infers args and returns a Flue tool", async
   assert.equal(refund.name, "issue_refund");
   const out = await ctx.run(
     { actor: { id: "u", roles: [] }, tenantId: "acme", scopes: ["customer:c-1"] },
-    () => refund.run({ input: { customerId: "c-1", amount: 40 } }),
+    () => refund.run({ data: { customerId: "c-1", amount: 40 } }),
   );
-  assert.equal(out, "refunded 40 to c-1 for acme");
+  assert.equal(out.output, "refunded 40 to c-1 for acme");
 });
 
 test("a { parse } validator degrades to a passthrough input; args still arrive", async () => {
@@ -197,7 +192,9 @@ test("a { parse } validator degrades to a passthrough input; args still arrive",
   });
 
   // (1) The real Flue defineTool accepts the passthrough input schema.
-  const tool = defineFlueTool(toFlueTool(governed));
+  const definition = toFlueTool(governed);
+  defineTool(definition); // Compile-check and normalize without a consumer cast.
+  const tool = defineFlueTool(definition);
   assert.ok(tool.input);
   // The passthrough parses arbitrary object args without stripping keys.
   assert.deepEqual(
@@ -211,15 +208,15 @@ test("a { parse } validator degrades to a passthrough input; args still arrive",
   };
   // (2) The model's arguments arrive at the handler.
   const out = await ctx.run(principal, () =>
-    tool.run({ input: { accountId: "a-1" } }),
+    tool.run({ data: { accountId: "a-1" } }),
   );
-  assert.equal(out, "found a-1");
+  assert.equal(out.output, "found a-1");
   assert.deepEqual(seen, { accountId: "a-1" });
 
   // (3) The internal validator runs on the real args and can reject them.
   await ctx.run(principal, async () => {
     await assert.rejects(
-      () => tool.run({ input: { accountId: 42 } }),
+      () => tool.run({ data: { accountId: 42 } }),
       /accountId required/,
     );
   });

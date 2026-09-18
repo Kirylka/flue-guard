@@ -66,20 +66,11 @@ export const resetPassword = gov.tool({
 });
 ```
 
-Bind the caller once per run, from your auth. The model can never read or
-set it:
-
-```ts
-import { govern, type GovernedToolkit } from "flue-guard";
-
-declare const gov: GovernedToolkit;
-declare const session: { prompt(text: string): Promise<unknown> };
-
-await gov.run(
-  { actor: { id: "user-7", roles: ["account_holder"] }, tenantId: "acme" },
-  () => session.prompt("I'm locked out, reset my password"),
-);
-```
+For dispatched Flue 2 agents, call `gov.withContext(trustedContext)` inside
+the agent function, then mount `bound.tool(...)` with `useTool`. Derive the
+caller from authenticated signal attributes returned by `useDelivery()`.
+An ambient `gov.run(...)` around dispatch does not reach the detached agent
+execution. See the [dispatched-agent example](/guides/cloudflare-workers#_3-bind-context-per-invocation-when-flue-dispatches).
 
 Start with the [tutorial](/tutorial): from `npm i` to a denied call and a
 verified audit line in under five minutes.

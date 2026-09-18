@@ -42,10 +42,10 @@ import {
 
 declare const gov: GovernedToolkit;
 declare const trustedCtx: TrustedContext;
-declare const session: { prompt(text: string): Promise<unknown> };
+declare const executeGovernedTools: () => Promise<unknown>;
 
 try {
-  await gov.run(trustedCtx, () => session.prompt("close my account"));
+  await gov.run(trustedCtx, executeGovernedTools);
 } catch (err) {
   if (isApprovalPending(err)) {
     // Suspend signal: park the run against err.ref and resume later.

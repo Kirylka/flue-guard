@@ -8,7 +8,7 @@ import type { TrustedContext } from "../src/types.js";
 
 test("hostContextResolver extracts trusted context from a runtime host object", async () => {
   // For non-Flue runtimes that pass a context object into execute as 2nd arg.
-  // (Flue itself passes an AbortSignal, so under Flue you'd use ContextStore.)
+  // (Flue provides no caller identity, so bind it with ContextStore/withContext.)
   interface RuntimeHost {
     session: { userId: string; tenant: string };
   }
@@ -59,7 +59,7 @@ test("toFlueTool forwards Flue's run({ signal }) to the handler's context", asyn
   const controller = new AbortController();
   const out = await tool.run({ signal: controller.signal });
 
-  assert.equal(out, "done");
+  assert.deepEqual(out, { output: "done" });
   assert.equal(seen, controller.signal);
 });
 
@@ -70,4 +70,21 @@ test("hostContextResolver throws if no host context is provided", () => {
     scopes: [],
   }));
   assert.throws(() => resolver(undefined), MissingContextError);
+});
+
+test("Flue 2 data reaches authorization and structured output stays inside the envelope", async () => {
+  const toolkit = createGovernedToolkit({
+    context: () => ({ actor: { id: "alice", roles: [] }, tenantId: "acme" }),
+    audit: new InMemoryAuditLog(),
+  });
+  const tool = toFlueTool(toolkit.defineGovernedTool<{ accountId: string }>({
+    name: "lookup_account",
+    description: "Look up the caller's account",
+    authorize: { anchor: "caller", check: (args, ctx) => args.accountId === ctx.actor.id },
+    execute: (args) => ({ accountId: args.accountId, terminate: true }),
+  }));
+  const context = { data: { accountId: "alice" }, signal: new AbortController().signal };
+  assert.deepEqual(await tool.run(context), {
+    output: { accountId: "alice", terminate: true },
+  });
 });

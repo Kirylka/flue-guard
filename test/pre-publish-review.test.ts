@@ -80,7 +80,7 @@ test("R1: invalid args against an ArkType-style standard schema are rejected, no
   );
 
   await assert.rejects(
-    tool.run({ input: { amount: "1e6; DROP" } }),
+    tool.run({ data: { amount: "1e6; DROP" } }),
     /amount must be a number/,
   );
   assert.equal(executed, 0);
@@ -102,7 +102,7 @@ test("R1: valid args against a standard schema pass through the validated value"
       execute: (a) => `refunded ${a.amount}`,
     }),
   );
-  assert.equal(await tool.run({ input: { amount: 5 } }), "refunded 5");
+  assert.deepEqual(await tool.run({ data: { amount: 5 } }), { output: "refunded 5" });
 });
 
 test("R1: an async standard-schema validate is awaited", async () => {

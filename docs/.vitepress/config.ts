@@ -19,6 +19,7 @@ export default defineConfig({
     "**/MANIFEST_SPEC.md",
     "**/TASK_SPECS.md",
     "**/TECH_ARCHITECTURE.md",
+    "**/JEV_GUARD_DESIGN.md",
   ],
   themeConfig: {
     nav: [
@@ -26,7 +27,7 @@ export default defineConfig({
       { text: "Guides", link: "/guides/authorize-vs-scope" },
       { text: "Reference", link: "/reference/entry-points" },
       {
-        text: "v0.1.0",
+        text: "v0.2.0",
         items: [
           { text: "npm", link: "https://www.npmjs.com/package/flue-guard" },
           { text: "Changelog", link: "https://github.com/Kirylka/flue-guard/releases" },

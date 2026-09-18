@@ -165,7 +165,7 @@ Patterns are literal except `*`, which matches any run of characters
 The manual Flue wiring path, for when you use `defineGovernedTool` directly:
 
 ```ts
-import { defineTool, type ToolDefinition } from "@flue/runtime";
+import { defineTool } from "@flue/runtime";
 import * as v from "valibot";
 import { createGovernedToolkit } from "flue-guard";
 import { toFlueTool } from "flue-guard/adapters";
@@ -180,15 +180,17 @@ export const ping = defineTool(
       parameters: v.object({ target: v.string() }),
       execute: async (a) => `pong: ${a.target}`,
     }),
-  ) as ToolDefinition,
+  ),
 );
 ```
 
-`toFlueTool` maps the governed intermediate onto Flue's beta.3+ contract: a
+`toFlueTool` maps the governed intermediate onto Flue's 2.x contract: a
 genuine Valibot `parameters` schema becomes the tool's `input` as-is; any
 other validator becomes an unconstrained object passthrough (arguments still
 arrive for internal validation, but the model gets no schema guidance). The
-governed handler runs from Flue's `run({ input, signal })`.
+governed handler runs from Flue's `run({ data, signal })`. Its result is
+wrapped in `{ output }`, including when the result itself contains `output`
+or `terminate` properties. Those fields remain application data.
 
 `hostContextResolver(extract)` builds a `ContextResolver` for **non-Flue**
 hosts that pass a context object to tools. Flue's `run` receives no host

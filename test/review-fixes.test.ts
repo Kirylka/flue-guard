@@ -11,8 +11,8 @@
  *        letting a retry duplicate an external side effect.
  *   F5 — exceptions from governance steps (scope/RBAC/authorize/...) escaped
  *        without an audit record, contradicting "every decision, hash-chained".
- *   F6 — toFlueTool must emit Flue's beta.3+ `run` contract and return the
- *        handler's structured result directly (Flue owns JSON serialization).
+ *   F6 — toFlueTool must emit Flue's 2.x `run` contract and return the
+ *        handler's result in an output envelope (Flue owns JSON serialization).
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -244,7 +244,7 @@ test("F5: an exception from scope derivation is audited too", async () => {
 });
 
 // --- F6 ---------------------------------------------------------------------
-test("F6: toFlueTool returns the handler's structured result directly", async () => {
+test("F6: toFlueTool wraps the handler's structured result in the output envelope", async () => {
   const make = (value: unknown): FlueCompatibleTool => ({
     name: "t",
     description: "",
@@ -252,16 +252,15 @@ test("F6: toFlueTool returns the handler's structured result directly", async ()
     execute: async () => value,
   });
 
-  // Flue's beta.3+ contract snapshots and JSON-serializes the value itself, so
-  // toFlueTool returns structured data unchanged rather than stringifying it.
+  // Flue consumes the output envelope and serializes its value for the model.
   const obj = toFlueTool(make({ ok: true }));
-  assert.deepEqual(await obj.run({}), { ok: true });
+  assert.deepEqual(await obj.run({}), { output: { ok: true } });
 
   const str = toFlueTool(make("hello"));
-  assert.equal(await str.run({}), "hello");
+  assert.deepEqual(await str.run({}), { output: "hello" });
 
   const undef = toFlueTool(make(undefined));
-  assert.equal(await undef.run({}), undefined);
+  assert.deepEqual(await undef.run({}), { output: undefined });
 });
 
 // --- Round 2 ----------------------------------------------------------------
@@ -309,7 +308,7 @@ test("R2: a bigint result is audited safely and returned to Flue as-is", async (
     },
   });
   const out = await toFlueTool(governed).run({});
-  assert.equal(out, 10n);
+  assert.deepEqual(out, { output: 10n });
   assert.equal(runs, 1);
 
   const entries = await audit.entries();

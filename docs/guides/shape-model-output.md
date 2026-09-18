@@ -49,7 +49,7 @@ original did. Note the stored value is JSON-normalized, so don't rely on
 
 Flue serializes what the model sees (the handler's return, or
 `toModelOutput`'s) and **rejects** `bigint`, `Date`, class instances, and
-circular structures (`@flue/runtime` beta.3+ behavior). Return plain objects,
+circular structures (`@flue/runtime` 2.x behavior). Return plain objects,
 arrays, strings, finite numbers, booleans, and `null`. Convert at the edge of
 your handler:
 

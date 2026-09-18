@@ -31,16 +31,16 @@ test("govern(): gov.tool returns a usable Flue tool gated by authorize", async (
   // Own account: allowed, returns the structured result Flue serializes.
   const out = await gov.run(
     { actor: { id: "u1", roles: [] }, tenantId: "t" },
-    () => reset.run({ input: { accountId: "u1" } }),
+    () => reset.run({ data: { accountId: "u1" } }),
   );
-  assert.equal(out, "sent:u1");
+  assert.deepEqual(out, { output: "sent:u1" });
 
   // Someone else's account: refused before the side effect.
   await assert.rejects(
     () =>
       gov.run(
         { actor: { id: "u1", roles: [] }, tenantId: "t" },
-        () => reset.run({ input: { accountId: "victim" } }),
+        () => reset.run({ data: { accountId: "victim" } }),
       ),
     AuthorizationDeniedError,
   );

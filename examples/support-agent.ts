@@ -106,7 +106,7 @@ const issueRefund = toolkit.defineGovernedTool<{
   },
 });
 
-// --- A tiny stand-in for Flue's defineAgent/init. ---------------------------
+// --- A direct governance exercise without a Flue model loop. ---------------------------
 function init(config: { tools: FlueCompatibleTool[] }) {
   const byName = new Map(config.tools.map((t) => [t.name, t]));
   return {

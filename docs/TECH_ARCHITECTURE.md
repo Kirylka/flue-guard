@@ -1,5 +1,7 @@
 # flue-guard — Technical Architecture
 
+> Historical design document: Flue API examples below describe the original beta integration. For the supported Flue 2 contract, see [the toolkit reference](./reference/toolkit.md) and [the current quickstart](../README.md).
+
 **Status:** Draft v0.1 (design — contracts and structure, not implementation)
 **Last updated:** 2026-06-17
 **Companion to:** `BUSINESS_REQUIREMENTS.md`, `FUNCTIONAL_REQUIREMENTS.md`

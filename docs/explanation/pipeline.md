@@ -69,7 +69,7 @@ schema, the gates, the key, the handler.
 
 The Flue-specific surface is one adapter module. `toFlueTool` maps the
 governed intermediate onto Flue's `ToolDefinition` contract
-(`input`/`run({ input, signal })`, verified against `@flue/runtime` beta.9),
+(`input`/`run({ data, signal })`, verified against `@flue/runtime` 2.0.8),
 and `govern()` pre-wires Flue's `defineTool`. The governance core itself
 never imports Flue, which is what keeps definition-time checks testable
 without a harness and lets `createGovernedToolkit` accept a different

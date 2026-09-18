@@ -53,60 +53,48 @@ contains copy-pasteable reference implementations:
 
 On Workers, agents typically run via Flue's dispatched/addressable path: the
 turn is processed detached from your request, so an `AsyncLocalStorage` scope
-around `dispatch()` can't reach the tool. Bind the context inside
-`defineAgent`, where Flue hands you the agent instance `id` and `env` your
-authenticated route selected:
+around `dispatch()` cannot reach the tool. Bind context inside the agent
+function using authenticated signal attributes from `useDelivery()`:
 
 ```ts
-import { defineAgent, defineTool, type ToolDefinition } from "@flue/runtime";
+'use agent';
+import { useDelivery, useModel, useTool } from "@flue/runtime";
 import * as v from "valibot";
-import { createGovernedToolkit, type AuditLog, type TrustedContext } from "flue-guard";
-import { toFlueTool } from "flue-guard/adapters";
+import { govern, type AuditLog } from "flue-guard";
 
 declare const d1Audit: AuditLog;
-declare const actorForAgent: (agentId: string) => { userId: string; roles: string[]; orgId: string };
+const base = govern({ audit: d1Audit });
 
-// No ambient context on the dispatched path; fail closed if anything tries.
-const base = createGovernedToolkit({
-  context: () => {
-    throw new Error("dispatched tools must be bound with withContext");
-  },
-  audit: d1Audit,
-});
-
-export default defineAgent(({ id }) => {
-  // Your route authenticated the caller and chose this agent id.
-  const actor = actorForAgent(id);
-  const trustedCtx: TrustedContext = {
-    actor: { id: actor.userId, roles: actor.roles },
-    tenantId: actor.orgId,
-    scopes: [`account:${actor.userId}`],
-  };
-
-  // Same audit log and idempotency store; per-invocation identity.
-  const bound = base.withContext(trustedCtx);
-
-  const resetPassword = defineTool(
-    toFlueTool(
-      bound.defineGovernedTool<{ accountId: string }>({
-        name: "reset_password",
-        description: "Send a password reset link.",
-        parameters: v.object({ accountId: v.string() }),
-        sideEffect: true,
-        scope: (a) => `account:${a.accountId}`,
-        execute: async (a) => `reset link sent for ${a.accountId}`,
-      }),
-    ) as ToolDefinition,
-  );
-
-  return { model: "anthropic/claude-haiku-4-5", tools: [resetPassword] };
-});
+export function SupportAgent() {
+  useModel("anthropic/claude-haiku-4-5");
+  const delivery = useDelivery();
+  const attrs = delivery.kind === "signal" ? delivery.attributes : undefined;
+  if (!attrs?.actorId || !attrs.tenantId) throw new Error("Missing authenticated caller");
+  const bound = base.withContext({
+    actor: { id: attrs.actorId, roles: ["account_holder"] },
+    tenantId: attrs.tenantId,
+    scopes: [`account:${attrs.actorId}`],
+  });
+  useTool(bound.tool({
+    name: "reset_password",
+    description: "Send a password reset link.",
+    parameters: v.object({ accountId: v.string() }),
+    sideEffect: true,
+    scope: (a) => `account:${a.accountId}`,
+    execute: async (a) => `reset link sent for ${a.accountId}`,
+  }));
+  return "Help the caller access their own account.";
+}
 ```
 
-When your own code drives the prompt and awaits it (workflows, direct
-session calls), plain `gov.run(...)` works on Workers too: under
-`nodejs_compat` the context flows through your awaited call exactly as on
-Node.
+Your server must authenticate the sender before setting `actorId` and
+`tenantId`, and authorize access to the destination conversation. Do not
+copy those attributes from untrusted request JSON. Bind the toolkit afresh
+on each render, so tool closures use the current delivery's identity.
+
+For direct execution inside your own awaited callback, `gov.run(...)` also
+works under `nodejs_compat`. Flue's `init().dispatch()` uses the same detached
+submission mechanism as top-level `dispatch()` and needs `withContext` too.
 
 There is deliberately no separate "edge build": one import that works under
 `nodejs_compat` is less to learn, and Flue itself already requires the flag.

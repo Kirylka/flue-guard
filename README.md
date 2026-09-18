@@ -13,7 +13,7 @@ Flue's own guidance says [a tool's parameters are model-selected inputs, not
 an authorization boundary](https://flueframework.com/docs/guide/tools/#protect-access).
 flue-guard is that boundary, as a library.
 
-**ESM-only · Node 22.19+ · peer `@flue/runtime` >=1.0.0-beta.9**
+**ESM-only · Node 22.19+ · peer `@flue/runtime` ^2.0.8**
 
 ## Quickstart
 
@@ -22,58 +22,84 @@ npm i flue-guard @flue/runtime valibot
 ```
 
 ```ts
-import { defineAgent, type ToolDefinition } from "@flue/runtime";
+'use agent';
+import { useDelivery, useModel, useTool } from "@flue/runtime";
 import * as v from "valibot";
 import { govern, caller } from "flue-guard";
 
-// Stand-ins for your app's data layer and Flue session:
+// Your application's data layer:
 declare const accounts: {
   ownedBy(accountId: string, actorId: string): Promise<boolean>;
   sendResetLink(accountId: string): Promise<void>;
 };
-declare const session: { prompt(text: string): Promise<unknown> };
 
-const gov = govern({ audit: "audit.jsonl" }); // hash-chained JSONL receipt
+const gov = govern({ audit: "audit.jsonl" });
 
-const resetPassword = gov.tool({
-  name: "reset_password",
-  description: "Send a password reset link.",
-  parameters: v.object({ accountId: v.string() }),
-  sideEffect: true,
-  // The check the Meta incident was missing: caller must own the account.
-  authorize: caller(
-    (a: { accountId: string }, ctx) => accounts.ownedBy(a.accountId, ctx.actor.id),
-  ),
-  // A retry replays the first result instead of sending a second link.
-  idempotency: { key: (a) => `reset:${a.accountId}` },
-  execute: async (a) => {
-    await accounts.sendResetLink(a.accountId);
-    return "Sent.";
-  },
-});
+export function SupportAgent() {
+  useModel("anthropic/claude-haiku-4-5");
+  const delivery = useDelivery();
+  const attrs = delivery.kind === "signal" ? delivery.attributes : undefined;
+  if (!attrs?.actorId || !attrs.tenantId) throw new Error("Missing authenticated caller");
 
-const agent = defineAgent(() => ({
-  model: "anthropic/claude-haiku-4-5",
-  tools: [resetPassword] as ToolDefinition[],
-}));
-
-// At your request boundary: bind who is calling, from your own auth.
-// The model can never read or set this.
-await gov.run(
-  { actor: { id: "user-7", roles: ["account_holder"] }, tenantId: "acme" },
-  () => session.prompt("I'm locked out, reset my password"),
-);
+  // Your server authenticates the sender before attaching these attributes.
+  const bound = gov.withContext({
+    actor: { id: attrs.actorId, roles: ["account_holder"] },
+    tenantId: attrs.tenantId,
+  });
+  useTool(bound.tool({
+    name: "reset_password",
+    description: "Send a password reset link.",
+    parameters: v.object({ accountId: v.string() }),
+    sideEffect: true,
+    authorize: caller((a: { accountId: string }, ctx) => accounts.ownedBy(a.accountId, ctx.actor.id)),
+    idempotency: { key: (a) => `reset:${a.accountId}` },
+    execute: async (a) => {
+      await accounts.sendResetLink(a.accountId);
+      return "Sent.";
+    },
+  }));
+  return "Help the caller access their own account.";
+}
 ```
 
-That is the whole API for most uses: `govern`, `gov.tool`, `caller`,
-`gov.run`. The tool refuses to define without an authorization gate, checks
-ownership before the side effect, won't fire twice on a retry, and writes a
-tamper-evident line for every call, denials included.
+From your authenticated server route, deliver a signal with `dispatch`:
 
-The one idea underneath: the model controls the arguments, your application
-controls the context. `authorize` and `scope` compare the untrusted arguments
-against the trusted context, which travels through `AsyncLocalStorage` where
-the model can never touch it.
+```ts
+import { dispatch, type Agent } from "@flue/runtime";
+
+declare const SupportAgent: Agent; // import your registered agent
+// Derived from your server's authentication, never copied from request JSON:
+declare const caller: { id: string; tenantId: string; conversationId: string };
+
+await dispatch(SupportAgent, {
+  id: caller.conversationId,
+  message: {
+    kind: "signal",
+    type: "support.request",
+    body: "I'm locked out, reset my password",
+    attributes: { actorId: caller.id, tenantId: caller.tenantId },
+  },
+});
+```
+
+The tool checks ownership before the side effect, replays a completed retry,
+and records governance decisions in a hash-chained audit log. Flue performs
+input validation before calling the guard; failures at that earlier layer
+appear in Flue's events, not the governance log.
+
+The model controls the arguments; your application controls the identity.
+Use `withContext` inside dispatched agents because their execution is detached
+from the request. `gov.run(context, fn)` supplies ambient context for direct
+calls that execute within `fn`; wrapping `dispatch()` or `init().dispatch()`
+in it does not bind the later agent execution.
+
+## Upgrading from Flue beta
+
+This release targets Flue **2.0.8 or newer within 2.x**. The governance spec
+(`parameters`, `authorize`, `execute`) stays the same. Direct invocations of
+the adapted tool now use `tool.run({ data: args })` and return `{ output }`.
+Agents use `'use agent'`, `useModel`, and `useTool`; see the
+[Flue migration guide](https://flueframework.com/docs/guide/migration/).
 
 ## Documentation
 

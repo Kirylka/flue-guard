@@ -56,11 +56,11 @@ await gov.run(
   { actor: { id: "alice", roles: ["account_holder"] }, tenantId: "demo" },
   async () => {
     // Alice resets her own account: allowed.
-    console.log(await resetPassword.run({ input: { accountId: "acct-alice" } }));
+    console.log((await resetPassword.run({ data: { accountId: "acct-alice" } })).output);
 
     // "Alice" asks for Bob's account: refused before the side effect runs.
     try {
-      await resetPassword.run({ input: { accountId: "acct-bob" } });
+      await resetPassword.run({ data: { accountId: "acct-bob" } });
     } catch (err) {
       if (!isGovernanceDenial(err)) throw err;
       console.log(`DENIED: ${err.message}`);
@@ -72,9 +72,10 @@ console.log("audit chain:", await audit.verify());
 ```
 
 `gov.tool(...)` returns a real Flue `ToolDefinition`, and the script invokes it
-through the same `run({ input })` contract Flue's runtime uses, so nothing
-here is a simulation. In production the model supplies `input`; that is exactly why
-the ownership check exists.
+through its `run({ data })` handler. This exercises governance directly;
+Flue's model loop additionally validates the input schema before calling
+`run` and consumes the returned `{ output }` envelope. The model chooses the
+arguments, which is exactly why the ownership check exists.
 
 ## 3. Run it
 
@@ -145,7 +146,9 @@ now demonstrated it yourself.
 ## Where to go next
 
 You have a governed tool: hand it to your agent like any other Flue tool and
-bind the context at your request boundary with `gov.run(...)`.
+bind context inside the agent function with `gov.withContext(...)` using
+authenticated `useDelivery()` attributes. An ambient `gov.run(...)` around
+dispatch does not reach the detached tool execution.
 
 - [Choose authorize vs scope](/guides/authorize-vs-scope): which gate fits
   which tool, and how to combine them.

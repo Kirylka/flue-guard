@@ -2,7 +2,7 @@
  * The dispatched / addressable-agent pattern: tools run detached from the
  * caller, so AsyncLocalStorage can't reach them. `toolkit.withContext(...)`
  * binds the trusted context per invocation (derived from the dispatch payload
- * inside `createAgent`) instead. These tests prove that binding works without
+ * inside the agent function) instead. These tests prove that binding works without
  * any ambient context and that concurrent interactions don't bleed.
  */
 import { test } from "node:test";
@@ -38,8 +38,8 @@ const acct = (id: string): TrustedContext => ({
 test("withContext binds identity per invocation, with no ambient context", async () => {
   const { toolkit, audit } = baseToolkit();
 
-  // This is what you'd do inside createAgent((ctx) => ...), deriving identity
-  // from ctx.payload:
+  // Inside an agent function, derive identity from authenticated delivery
+  // attributes returned by useDelivery():
   const bound = toolkit.withContext(acct("user-7"));
   const resetPassword = bound.defineGovernedTool<{ accountId: string }>({
     name: "reset_password",
@@ -107,7 +107,7 @@ test("two concurrent interactions don't bleed contexts", async () => {
   await assert.rejects(() => b.execute({ accountId: "alice" }), ScopeViolationError);
 });
 
-test("withContext composes with the real Flue defineTool + toFlueTool", async () => {
+test("withContext binds identity through the Flue adapter", async () => {
   // Use the real adapter shape so the dispatched pattern is exercised end to end
   // at the tool-contract level.
   const { toolkit, audit } = baseToolkit();
@@ -122,9 +122,9 @@ test("withContext composes with the real Flue defineTool + toFlueTool", async ()
     }),
   );
 
-  // Flue calls run({ input, signal }) and expects structured data back.
-  const out = await flueTool.run({ input: { accountId: "user-9" } });
-  assert.deepEqual(out, { reset: "user-9" });
+  // Flue calls run({ data, signal }) and expects an output envelope.
+  const out = await flueTool.run({ data: { accountId: "user-9" } });
+  assert.deepEqual(out, { output: { reset: "user-9" } });
   assert.equal((await audit.entries()).at(-1)!.outcome, "success");
 });
 

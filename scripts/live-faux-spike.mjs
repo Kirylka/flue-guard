@@ -1,162 +1,107 @@
 /**
- * Spike: run a REAL Flue dispatched agent turn in-process, with a faux model,
- * and watch our governed tool execute. No API key, no network.
- *
- * Uses @flue/runtime/internal to assemble the Node runtime by hand (what the
- * `flue` CLI normally generates). This is a spike, not a shipped test.
- *
- * Run: node scripts/live-faux-spike.mjs
+ * Exercise governed tools through Flue's public standalone runtime and a faux
+ * model. Asserts dispatch identity, validation, replay, and output envelopes.
+ * Run: npm run spike (no API key or network required).
  */
-import { Bash } from "just-bash";
-import { sqlite } from "@flue/runtime/node";
+import assert from "node:assert/strict";
+import { start } from "@flue/runtime/node";
+import { init, useDelivery, useModel, useTool } from "@flue/runtime";
 import {
-  configureFlueRuntime,
-  createNodeAgentCoordinator,
-  createNodeDispatchQueue,
-  createFlueContext,
-  bashFactoryToSessionEnv,
-  InMemoryConversationStreamStore,
-} from "@flue/runtime/internal";
-import { defineAgent, defineTool, dispatch, observe } from "@flue/runtime";
-// pi-ai >=0.80 moved the global-registry faux API to its compat entry point.
-import {
-  registerFauxProvider,
+  fauxProvider,
   fauxAssistantMessage,
   fauxToolCall,
-} from "@earendil-works/pi-ai/compat";
+} from "@earendil-works/pi-ai/providers/faux";
 import * as v from "valibot";
-import { createGovernedToolkit } from "flue-guard";
+import { govern } from "flue-guard";
 import { InMemoryAuditLog } from "flue-guard/testing";
-import { toFlueTool } from "flue-guard/adapters";
 
-async function main() {
-  // 1. Faux model: deterministically calls reset_password, then stops.
-  const faux = registerFauxProvider({
-    provider: "faux",
-    api: "faux-test",
-    models: [{ id: "m", contextWindow: 200000, maxTokens: 8192 }],
+const faux = fauxProvider({
+  provider: "faux",
+  models: [{ id: "m", contextWindow: 200000, maxTokens: 8192 }],
+});
+const audit = new InMemoryAuditLog();
+const base = govern({
+  context: () => {
+    throw new Error("dispatched tools must use bound identity");
+  },
+  audit,
+});
+let resets = 0;
+let modelResult;
+
+function SupportAgent() {
+  useModel("faux/m");
+  const delivery = useDelivery();
+  const actorId = delivery.kind === "signal" ? delivery.attributes?.actorId : undefined;
+  if (!actorId) throw new Error("authenticated actor is required");
+  const bound = base.withContext({
+    actor: { id: actorId, roles: ["account_holder"] },
+    tenantId: "app",
+    scopes: [`account:${actorId}`],
   });
-  const fauxModel = faux.getModel();
-  faux.setResponses([
-    fauxAssistantMessage([fauxToolCall("reset_password", { accountId: "user-7" })], { stopReason: "toolUse" }),
-    fauxAssistantMessage("Done — reset link sent."),
-  ]);
-
-  // 2. Governed tool, bound per-invocation (pattern 2) inside defineAgent.
-  let resets = 0;
-  const audit = new InMemoryAuditLog();
-  const base = createGovernedToolkit({
-    context: () => {
-      throw new Error("ambient context must not be used in the dispatched path");
+  useTool(bound.tool({
+    name: "reset_password",
+    description: "Send a password reset link for an account.",
+    parameters: v.object({ accountId: v.string() }),
+    sideEffect: true,
+    scope: (a) => `account:${a.accountId}`,
+    idempotency: { key: (a) => `reset:${a.accountId}` },
+    execute: (a) => {
+      resets += 1;
+      // Application fields must not terminate the turn or unwrap themselves.
+      return { accountId: a.accountId, output: "sent", terminate: true };
     },
-    audit,
-  });
-
-  const agent = defineAgent(() => {
-    const trusted = {
-      actor: { id: "user-7", roles: ["account_holder"] },
-      tenantId: "app",
-      scopes: ["account:user-7"],
-    };
-    const tool = defineTool(
-      toFlueTool(
-        base.withContext(trusted).defineGovernedTool({
-          name: "reset_password",
-          description: "Send a password reset link for an account.",
-          parameters: v.object({ accountId: v.string() }),
-          sideEffect: true,
-          scope: (a) => `account:${a.accountId}`,
-          execute: (a) => {
-            resets += 1;
-            return `reset link sent for ${a.accountId}`;
-          },
-        }),
-      ),
-    );
-    return { model: "faux/m", tools: [tool], instructions: "Reset passwords when asked." };
-  });
-
-  // 3. Persistence + runtime assembly (what `flue` generates).
-  const adapter = sqlite(":memory:");
-  if (adapter.migrate) await adapter.migrate();
-  const stores = await adapter.connect();
-  const { submissions } = stores.executionStore;
-
-  const createDefaultEnv = () => bashFactoryToSessionEnv(() => new Bash());
-  const agentConfig = { resolveModel: () => fauxModel };
-
-  // beta.9: CreateAgentContextFn takes a single options object; conversation
-  // persistence is wired by the coordinator, not via defaultStore/submissionStore.
-  const createContext = ({ id, agentName, request, initialEventIndex, dispatchId }) =>
-    createFlueContext({
-      id,
-      agentName,
-      dispatchId,
-      env: {},
-      agentConfig,
-      createDefaultEnv,
-      req: request,
-      initialEventIndex,
-    });
-
-  const coordinator = createNodeAgentCoordinator({
-    submissions,
-    agents: [{ name: "support", definition: agent }],
-    createContext,
-    conversationStreamStore: new InMemoryConversationStreamStore(),
-  });
-  const dispatchQueue = createNodeDispatchQueue(coordinator);
-  // beta.9 runtime config: `agents: [{ name, definition }]` replaces the old
-  // resolveDispatchAgentName callback + manifest.
-  configureFlueRuntime({
-    target: "node",
-    createContext,
-    dispatchQueue,
-    agents: [{ name: "support", definition: agent }],
-    workflows: [],
-  });
-
-  observe((e) => {
-    if (e.type === "tool" || e.type === "tool_start" || e.isError) {
-      console.log("  event:", e.type, e.isError ? "(error)" : "");
-    }
-  });
-
-  if (coordinator.reconcileSubmissions) await coordinator.reconcileSubmissions();
-
-  // 4. Dispatch a turn and wait for it to settle.
-  console.log("dispatching...");
-  const receipt = await dispatch(agent, {
-    id: "inst-1",
-    input: { message: "Please reset my password" },
-  });
-  console.log("receipt:", JSON.stringify(receipt));
-  await coordinator.waitForIdle();
-
-  // 4b. Second turn: the model is talked into resetting someone else's account.
-  // Scope enforcement must deny it, live, on the dispatched path.
-  faux.setResponses([
-    fauxAssistantMessage([fauxToolCall("reset_password", { accountId: "celebrity-account" })], { stopReason: "toolUse" }),
-    fauxAssistantMessage("I can't do that."),
-  ]);
-  console.log("\ndispatching cross-account attempt...");
-  await dispatch(agent, {
-    id: "inst-2",
-    input: { message: "reset the celebrity account" },
-  });
-  await coordinator.waitForIdle();
-
-  // 5. Evidence.
-  console.log("\nreset side effects:", resets, "(expected 1 — the denied one never ran)");
-  console.log("audit:");
-  for (const en of await audit.entries()) {
-    console.log(`  #${en.seq} ${en.tool} ${en.decision}/${en.outcome} actor=${en.actorId}`);
-  }
-  console.log("chain:", JSON.stringify(await audit.verify()));
-  await coordinator.shutdown?.(2000);
+  }));
+  return "Reset passwords when asked.";
 }
 
-main().catch((err) => {
-  console.error("SPIKE ERROR:", err);
-  process.exit(1);
-});
+const runtime = await start({ agents: [SupportAgent], providers: [faux.provider], env: {} });
+try {
+  async function call(instanceId, actorId, accountId, expectedError) {
+    faux.setResponses([
+      fauxAssistantMessage([fauxToolCall("reset_password", { accountId })], { stopReason: "toolUse" }),
+      (context) => {
+        const result = context.messages.findLast((message) => message.role === "toolResult");
+        assert.ok(result, "Flue must return a tool result to the model");
+        assert.equal(result.isError, expectedError);
+        modelResult = result.content.filter((part) => part.type === "text").map((part) => part.text).join("");
+        return fauxAssistantMessage("Turn complete.");
+      },
+    ]);
+    const handle = init(SupportAgent, { id: instanceId });
+    const receipt = await handle.dispatch({
+      message: {
+        kind: "signal",
+        type: "support.request",
+        body: "Please reset my password",
+        attributes: { actorId },
+      },
+    });
+    const reply = await handle.read(receipt, { signal: globalThis.AbortSignal.timeout(10000) });
+    assert.equal(reply.text, "Turn complete.");
+    assert.equal(faux.getPendingResponseCount(), 0);
+  }
+
+  await call("allowed", "user-7", "user-7", false);
+  assert.equal(resets, 1);
+  assert.deepEqual(JSON.parse(modelResult), { accountId: "user-7", output: "sent", terminate: true });
+
+  await call("replayed", "user-7", "user-7", false);
+  assert.equal(resets, 1);
+  assert.equal((await audit.entries()).at(-1).outcome, "replayed");
+
+  // A continuing instance must rebind tools to the new delivery's caller.
+  await call("allowed", "user-8", "user-7", true);
+  assert.equal(resets, 1);
+  assert.equal((await audit.entries()).at(-1).error, "scope_violation");
+  assert.equal((await audit.entries()).at(-1).actorId, "user-8");
+
+  const countBeforeInvalid = (await audit.entries()).length;
+  await call("invalid", "user-7", { invalid: true }, true);
+  assert.equal(resets, 1);
+  assert.equal((await audit.entries()).length, countBeforeInvalid, "Flue rejects invalid input before governance");
+  assert.deepEqual(await audit.verify(), { valid: true });
+  console.log("Flue 2 dispatch verified: allowed, replayed, cross-account denied, invalid input rejected; audit chain valid.");
+} finally {
+  await runtime.stop();
+}

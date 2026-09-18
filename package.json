@@ -1,6 +1,6 @@
 {
   "name": "flue-guard",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "In-process authorization and tamper-evident audit for Flue agent tools — stop an agent acting on the wrong resource, twice, or unrecorded.",
   "type": "module",
   "license": "MIT",
@@ -75,12 +75,13 @@
     "prepublishOnly": "npm run build && npm test"
   },
   "peerDependencies": {
-    "@flue/runtime": ">=1.0.0-beta.9 <1.0.0",
+    "@flue/runtime": "^2.0.8",
     "valibot": "^1.0.0"
   },
   "devDependencies": {
+    "@earendil-works/pi-ai": "^0.83.0",
     "@eslint/js": "^10.0.1",
-    "@flue/runtime": "^1.0.0-beta.9",
+    "@flue/runtime": "^2.0.8",
     "@types/node": "^22.0.0",
     "eslint": "^10.6.0",
     "konsistent": "1.0.0-beta.1",
