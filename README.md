@@ -4,16 +4,26 @@
 [![CI](https://github.com/Kirylka/flue-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/Kirylka/flue-guard/actions/workflows/ci.yml)
 [![docs](https://img.shields.io/badge/docs-site-blue)](https://kirylka.github.io/flue-guard/)
 
-Governance for [Flue](https://flueframework.com) tools: per-call
-authorization, safe retries, and a tamper-evident audit log, in-process.
-It stops an agent from acting on the wrong resource, acting twice, or acting
-unrecorded.
+**[Documentation](https://kirylka.github.io/flue-guard/)** · ESM-only · Node
+22.19+ · peer `@flue/runtime` ^2.0.8
 
-Flue's own guidance says [a tool's parameters are model-selected inputs, not
-an authorization boundary](https://flueframework.com/docs/guide/tools/#protect-access).
-flue-guard is that boundary, as a library.
+Every tool you hand an agent is a function the model chooses to call, with
+arguments the model writes. Flue says this plainly: [a tool's parameters are
+model-selected inputs, not an authorization
+boundary](https://flueframework.com/docs/guide/tools/#protect-access). The check
+has to live somewhere else. flue-guard is that somewhere.
 
-**ESM-only · Node 22.19+ · peer `@flue/runtime` ^2.0.8**
+It wraps a Flue tool and runs your checks before the handler. Is this caller
+allowed to touch this record? Has this operation already run? What gets written
+down about it? A denied call never reaches your code. A retried call never
+repeats the side effect. Every decision lands in a hash-chained log you can
+verify later.
+
+You want it as soon as a tool does something real. An agent that reads a public
+help article is fine without a gate. One that resets a password, issues a
+refund, or closes an account is not: the model picks the account id, and a
+careful prompt is not a check. flue-guard refuses to define a side-effecting
+tool that has no gate at all, so the missing check cannot ship by accident.
 
 ## Quickstart
 
@@ -93,20 +103,12 @@ from the request. `gov.run(context, fn)` supplies ambient context for direct
 calls that execute within `fn`; wrapping `dispatch()` or `init().dispatch()`
 in it does not bind the later agent execution.
 
-## Upgrading from Flue beta
-
-This release targets Flue **2.0.8 or newer within 2.x**. The governance spec
-(`parameters`, `authorize`, `execute`) stays the same. Direct invocations of
-the adapted tool now use `tool.run({ data: args })` and return `{ output }`.
-Agents use `'use agent'`, `useModel`, and `useTool`; see the
-[Flue migration guide](https://flueframework.com/docs/guide/migration/).
-
 ## Documentation
 
 | | |
 | --- | --- |
 | [Tutorial](https://kirylka.github.io/flue-guard/tutorial) | Your first governed tool: a denied call and a verified audit line, in five minutes |
-| [How-to guides](https://kirylka.github.io/flue-guard/guides/authorize-vs-scope) | Authorize vs scope, human approval, safe retries, audit protection, Cloudflare Workers, shaping model output |
+| [How-to guides](https://kirylka.github.io/flue-guard/guides/authorize-vs-scope) | Authorize vs scope, human approval, safe retries, audit protection, Cloudflare Workers, shaping model output, [the Jev guard](https://kirylka.github.io/flue-guard/guides/jev-guard) |
 | [Reference](https://kirylka.github.io/flue-guard/reference/entry-points) | Every entry point, tool-spec field, error, and adapter interface |
 | [Explanation](https://kirylka.github.io/flue-guard/explanation/why-flue-guard) | Why it exists, the pipeline, the trust model |
 
@@ -152,14 +154,14 @@ npm run spike     # a real Flue dispatched turn with a faux model, no API key
 `audit.jsonl` hash chain in your browser and lets you tamper with a line to
 watch verification catch it.
 
-## Optional guard step (experimental Jev adapter)
+## Optional guard step
 
-A tool can declare a `guard` that runs after authorization and before approval.
-It allows the call, denies it, or sends it to your approval adapter for review.
-Any guard error or timeout blocks the call. The `flue-guard/jev` adapter checks
-the proposed action against your written policy with TypeSafe's Jev model;
-install `@typesafe-ai/sdk` separately to use it. The adapter is experimental and
-its options may change. A guard never replaces `authorize`. See
+`authorize` decides who may call a tool. It cannot read the reply the agent is
+about to send and notice an internal note in it. A `guard` can: it reads the
+call and allows it, refuses it, or hands it to a human. The adapter we ship,
+`flue-guard/jev`, asks TypeSafe's Jev model whether the call breaks a policy you
+wrote in plain English. It never replaces `authorize`. Experimental, and it
+needs `@typesafe-ai/sdk`. See
 [Add a Jev guard](https://kirylka.github.io/flue-guard/guides/jev-guard).
 
 ## License
