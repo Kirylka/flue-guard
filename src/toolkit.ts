@@ -29,7 +29,12 @@ import type {
   TrustedContext,
 } from "./types.js";
 import { ContextStore, type ContextResolver } from "./context.js";
-import { HashChainAuditLog, type AuditLog, type AuditInput } from "./audit.js";
+import {
+  GENESIS_HASH,
+  HashChainAuditLog,
+  type AuditLog,
+  type AuditInput,
+} from "./audit.js";
 import { InMemoryIdempotencyStore, type IdempotencyStore } from "./idempotency.js";
 import { defaultRbac, type RbacAdapter } from "./rbac.js";
 import {
@@ -208,6 +213,27 @@ export type GovernedFlueToolSpec<S extends StandardSchemaV1, TResult> = Omit<
 /** Flue's `defineTool`, injected so the core stays free of any Flue import. */
 export type FlueDefineTool = (tool: FlueToolDefinition) => FlueToolDefinition;
 
+/**
+ * Sink for `audit: false`. The pipeline always writes its outcome somewhere, so
+ * opting out needs a sink rather than a branch at every call site. Nothing is
+ * kept: the returned record exists only to satisfy the {@link AuditLog}
+ * contract, and the toolkit never reads it.
+ */
+const discardedAudit: AuditLog = {
+  async append(input: AuditInput) {
+    return {
+      ...input,
+      seq: 0,
+      prevHash: GENESIS_HASH,
+      ts: input.ts ?? new Date().toISOString(),
+      hash: "",
+    };
+  },
+  async entries() {
+    return [];
+  },
+};
+
 export interface GovernedToolkitOptions {
   /**
    * Trusted-context source (never model output). Omit it to use the toolkit's
@@ -216,8 +242,13 @@ export interface GovernedToolkitOptions {
    * a custom binding (then `toolkit.run` is unavailable — you bind it yourself).
    */
   context?: ContextStore | ContextResolver;
-  /** Audit sink — an {@link AuditLog}, or a file path string (hash-chained JSONL). */
-  audit: AuditLog | string;
+  /**
+   * Audit sink — an {@link AuditLog}, or a file path string (hash-chained
+   * JSONL). Required, so you cannot end up without a record by forgetting it:
+   * pass `false` to say out loud that this toolkit keeps none. Governance
+   * decisions still hold with `false`; you just lose the receipt.
+   */
+  audit: AuditLog | string | false;
   /** Idempotency store. Defaults to a process-local in-memory store. */
   idempotencyStore?: IdempotencyStore;
   /**
@@ -340,9 +371,11 @@ export function createGovernedToolkit(
     options.idempotencyStore ?? new InMemoryIdempotencyStore();
   const defineToolFn = options.defineTool;
   const auditLog: AuditLog =
-    typeof options.audit === "string"
-      ? new HashChainAuditLog({ path: options.audit })
-      : options.audit;
+    options.audit === false
+      ? discardedAudit
+      : typeof options.audit === "string"
+        ? new HashChainAuditLog({ path: options.audit })
+        : options.audit;
   const timestamp = (): string | undefined =>
     options.clock ? new Date(options.clock()).toISOString() : undefined;
 

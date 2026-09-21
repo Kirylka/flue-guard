@@ -5,17 +5,21 @@ the tool. None of that may refund a customer twice. Declare an `idempotency`
 policy and the handler runs **at most once per logical operation**; every
 repeat replays the recorded result instead.
 
-## Declare a key
+Both examples below use this toolkit:
 
-```ts
+```ts setup
 import * as v from "valibot";
 import { govern } from "flue-guard";
 
+const gov = govern({ audit: "audit.jsonl" });
+```
+
+## Declare a key
+
+```ts
 declare const billing: {
   refund(customerId: string, amount: number): Promise<{ refundId: string; ok: boolean }>;
 };
-
-const gov = govern({ audit: "audit.jsonl" });
 
 export const issueRefund = gov.tool({
   name: "issue_refund",
@@ -82,11 +86,11 @@ an atomic claim, such as Redis `SET NX`, Postgres, or Cloudflare KV/Durable
 Objects (see [Run on Cloudflare Workers](/guides/cloudflare-workers)):
 
 ```ts
-import { govern, type IdempotencyStore } from "flue-guard";
+import { type IdempotencyStore } from "flue-guard";
 
 declare const redisStore: IdempotencyStore; // your implementation
 
-const gov = govern({ audit: "audit.jsonl", idempotencyStore: redisStore });
+const govWithRedis = govern({ audit: "audit.jsonl", idempotencyStore: redisStore });
 ```
 
 The interface is four methods (`begin` / `complete` / `fail` / `get`); see

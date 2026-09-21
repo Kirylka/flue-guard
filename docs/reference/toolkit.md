@@ -50,7 +50,7 @@ injection seam; `govern` performs the same cast internally.)
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `audit` | `AuditLog \| string` | required | The audit sink. A string is a file path: a `HashChainAuditLog` (hash-chained JSONL, Node only). |
+| `audit` | `AuditLog \| string \| false` | required | The audit sink. A string is a file path: a `HashChainAuditLog` (hash-chained JSONL, Node only). `false` keeps no record at all — see below. |
 | `context` | `ContextStore \| ContextResolver` | a fresh `ContextStore` | How tools resolve the trusted context. Omit it for the built-in store driven by `toolkit.run(...)`. Pass a `ContextStore` to share one, or a resolver function for custom binding (then `run`/`current`/`peek` throw `GovernanceConfigError`). |
 | `idempotencyStore` | `IdempotencyStore` | `InMemoryIdempotencyStore` | Where idempotency claims and results live. Process-local by default. |
 | `trustedSources` | `Record<string, TrustedSource>` | `{}` | Named server-side lookups for `trusted(...)` authorization anchors. An unknown name referenced by a tool fails at definition time. |
@@ -59,6 +59,19 @@ injection seam; `govern` performs the same cast internally.)
 | `approval` | `ApprovalAdapter` | none | Decides approval requests. Without one, any call that requires approval is denied. |
 | `redaction` | `Redactor` | `defaultRedactor` | Applied to args, results, and error strings before they are written to the audit log. |
 | `clock` | `() => number` | none | Injectable clock for deterministic audit timestamps in tests. |
+
+`audit` has no default on purpose. A toolkit that quietly records nothing is the
+one you find out about after the incident, so the option is required and you
+have to write down which sink you want. When you genuinely want none — a test, a
+throwaway script, a snippet you just want to run — say so:
+
+```ts
+import { govern } from "flue-guard";
+
+const gov = govern({ audit: false }); // keeps no record
+```
+
+Every gate still runs. You only lose the receipt.
 
 ## `GovernedToolkit`
 

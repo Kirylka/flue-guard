@@ -7,6 +7,11 @@
  *
  * Skip a block that is deliberately non-compiling with ```ts no-check.
  *
+ * Mark one block per page with ```ts setup and it is prepended to every other
+ * sample on that page before compiling. That keeps boilerplate (the toolkit, a
+ * stubbed dependency) on the page once instead of in every example, while each
+ * example is still checked against the real API.
+ *
  * Run: npm run docs:check-samples
  */
 import { execFileSync } from "node:child_process";
@@ -31,14 +36,22 @@ const fence = /^```(\S+)([^\n]*)\n([\s\S]*?)^```/gm;
 let count = 0;
 for (const page of pages) {
   const text = fs.readFileSync(path.join(root, page), "utf8");
-  for (const [, lang, meta, body] of text.matchAll(fence)) {
-    if (!["ts", "typescript"].includes(lang) || meta.includes("no-check")) continue;
+  const blocks = [...text.matchAll(fence)]
+    .filter(([, lang, meta]) => ["ts", "typescript"].includes(lang) && !meta.includes("no-check"))
+    .map(([, , meta, body]) => ({ setup: meta.includes("setup"), body }));
+  const setups = blocks.filter((block) => block.setup);
+  if (setups.length > 1) {
+    console.error(`${page}: more than one \`\`\`ts setup block`);
+    process.exit(1);
+  }
+  const preamble = setups[0] ? `${setups[0].body}\n` : "";
+  for (const block of blocks) {
     count += 1;
     const name = `${String(count).padStart(2, "0")}-${page.replace(/[/.]/g, "-")}.ts`;
     // `export {}` forces module scope so samples can't collide with each other.
     fs.writeFileSync(
       path.join(outDir, name),
-      `// from ${page}\n${body}\nexport {};\n`,
+      `// from ${page}\n${block.setup ? "" : preamble}${block.body}\nexport {};\n`,
     );
   }
 }

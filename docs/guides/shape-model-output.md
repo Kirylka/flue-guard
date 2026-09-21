@@ -13,17 +13,21 @@ Using one for the other's job is the classic mistake: `toModelOutput` does
 **not** keep a secret out of the audit trail, and `redact` does **not** keep
 tokens out of the model's context.
 
+Every example below uses this toolkit:
+
+```ts setup
+import * as v from "valibot";
+import { govern } from "flue-guard";
+
+const gov = govern({ audit: "audit.jsonl" });
+```
+
 ## Trim the model's view with `toModelOutput`
 
 Context hygiene: return rich data for your records, hand the model only what
 it needs.
 
 ```ts
-import * as v from "valibot";
-import { govern } from "flue-guard";
-
-const gov = govern({ audit: "audit.jsonl" });
-
 export const lookupCustomer = gov.tool({
   name: "lookup_customer",
   description: "Fetch a customer profile.",
@@ -54,14 +58,9 @@ arrays, strings, finite numbers, booleans, and `null`. Convert at the edge of
 your handler:
 
 ```ts
-import * as v from "valibot";
-import { govern } from "flue-guard";
-
 declare const orders: {
   find(orderId: string): Promise<{ id: string; total: bigint; placedAt: Date }>;
 };
-
-const gov = govern({ audit: "audit.jsonl" });
 
 export const lookupOrder = gov.tool({
   name: "lookup_order",
@@ -89,11 +88,7 @@ strings. Override per tool when a tool handles something the defaults don't
 know about:
 
 ```ts
-import * as v from "valibot";
-import { govern } from "flue-guard";
 import { composeRedactors, defaultRedactor, redactFields } from "flue-guard/adapters";
-
-const gov = govern({ audit: "audit.jsonl" });
 
 export const rotateCredential = gov.tool({
   name: "rotate_credential",

@@ -13,6 +13,15 @@ A side-effecting tool must declare at least one gate (`scope`, `authorize`,
 `GovernanceConfigError`. That refusal is the point: the missing check can't
 ship by accident.
 
+Every example below uses this toolkit:
+
+```ts setup
+import * as v from "valibot";
+import { govern, caller, trusted } from "flue-guard";
+
+const gov = govern({ audit: "audit.jsonl" });
+```
+
 ## Gate by scope: enumerable grants
 
 Declare what the call *wants to touch*; the library compares it to the
@@ -20,14 +29,9 @@ Declare what the call *wants to touch*; the library compares it to the
 comparison, so you can't forget to involve the caller.
 
 ```ts
-import * as v from "valibot";
-import { govern } from "flue-guard";
-
 declare const billing: {
   refund(tenantId: string, customerId: string, amount: number): Promise<{ ok: boolean }>;
 };
-
-const gov = govern({ audit: "audit.jsonl" });
 
 export const issueRefund = gov.tool({
   name: "issue_refund",
@@ -75,12 +79,7 @@ nothing trusted) has no shape you can write.
 **Anchor 1: the authenticated caller.** The common case:
 
 ```ts
-import * as v from "valibot";
-import { govern, caller } from "flue-guard";
-
 declare const accounts: { ownedBy(accountId: string, actorId: string): Promise<boolean> };
-
-const gov = govern({ audit: "audit.jsonl" });
 
 export const closeAccount = gov.tool({
   name: "close_account",
@@ -107,19 +106,17 @@ there is no authenticated actor. The named source is resolved server-side and
 its value handed to your check:
 
 ```ts
-import * as v from "valibot";
-import { govern, trusted } from "flue-guard";
-
 declare const accounts: { emailOnFile(accountId: string): Promise<string> };
 
-const gov = govern({
+// Trusted sources are a toolkit-level option, so this example needs its own.
+const govWithSources = govern({
   audit: "audit.jsonl",
   trustedSources: {
     accountEmail: (args) => accounts.emailOnFile((args as { accountId: string }).accountId),
   },
 });
 
-export const recoverAccount = gov.tool({
+export const recoverAccount = govWithSources.tool({
   name: "recover_account",
   description: "Start account recovery when the reset email matches the one on file.",
   parameters: v.object({ accountId: v.string(), resetEmail: v.string() }),
@@ -143,13 +140,8 @@ fixed order (`RBAC -> scope -> authorize -> approval`). A typical high-risk tool
 uses each for what it's best at:
 
 ```ts
-import * as v from "valibot";
-import { govern, caller } from "flue-guard";
-
 declare const accounts: { ownedBy(accountId: string, actorId: string): Promise<boolean> };
 declare const registrar: { transfer(accountId: string, to: string): Promise<void> };
-
-const gov = govern({ audit: "audit.jsonl" });
 
 export const transferDomain = gov.tool({
   name: "transfer_domain",

@@ -12,11 +12,11 @@ The adapter is experimental, so option names may still change.
 npm install @typesafe-ai/sdk@^0.6.0
 ```
 
-```ts
+The example below governs one ticket-reply tool, set up as usual:
+
+```ts setup
 import * as v from "valibot";
-import { TypeSafeClient } from "@typesafe-ai/sdk";
 import { govern, caller } from "flue-guard";
-import { createJevGuard } from "flue-guard/jev";
 
 declare const tickets: {
   owns(actorId: string, ticketId: string): Promise<boolean>;
@@ -24,6 +24,15 @@ declare const tickets: {
 };
 
 type Reply = { ticketId: string; text: string };
+
+const gov = govern({ audit: "audit.jsonl" });
+```
+
+The guard itself:
+
+```ts
+import { TypeSafeClient } from "@typesafe-ai/sdk";
+import { createJevGuard } from "flue-guard/jev";
 
 const guard = createJevGuard<Reply>({
   client: new TypeSafeClient(), // reads TYPESAFE_API_KEY
@@ -34,8 +43,6 @@ const guard = createJevGuard<Reply>({
   thresholds: { review: 0.3, deny: 0.8 },
   state: ({ args }) => ({ action: "Send this text to the customer", text: args.text }),
 });
-
-const gov = govern({ audit: "audit.jsonl" });
 
 export const reply = gov.tool({
   name: "reply",

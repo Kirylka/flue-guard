@@ -57,6 +57,30 @@ test("minimal setup: audit path string + built-in store + optional scopes", asyn
   }
 });
 
+test("audit: false turns the log off without weakening any gate", async () => {
+  const gov = createGovernedToolkit({ audit: false });
+  let runs = 0;
+  const reset = gov.defineGovernedTool<{ accountId: string }>({
+    name: "reset_password",
+    description: "send a reset link",
+    sideEffect: true,
+    authorize: caller((a, ctx) => a.accountId === ctx.actor.id),
+    execute: () => {
+      runs += 1;
+      return "ok";
+    },
+  });
+
+  await gov.run({ actor: { id: "u-1", roles: [] }, tenantId: "app" }, async () => {
+    assert.equal(await reset.execute({ accountId: "u-1" }), "ok");
+    await assert.rejects(
+      () => reset.execute({ accountId: "victim" }),
+      AuthorizationDeniedError,
+    );
+  });
+  assert.equal(runs, 1);
+});
+
 test("gov.run binds the built-in store; current() throws outside it", () => {
   const gov = createGovernedToolkit({ audit: new InMemoryAuditLog() });
   assert.throws(() => gov.current(), MissingContextError);
