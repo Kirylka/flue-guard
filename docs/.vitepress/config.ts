@@ -1,4 +1,11 @@
+import { readFileSync } from "node:fs";
 import { defineConfig } from "vitepress";
+
+// Read the shipped version rather than restating it: a hand-typed nav label is
+// stale the moment a release goes out, and nobody notices for months.
+const { version } = JSON.parse(
+  readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
+) as { version: string };
 
 export default defineConfig({
   title: "flue-guard",
@@ -6,21 +13,13 @@ export default defineConfig({
     "Governance layer for Flue tools: in-process authorization, idempotency, and tamper-evident audit.",
   base: "/flue-guard/",
   lastUpdated: true,
-  srcExclude: [
-    // Redirect stubs for links baked into already-published npm READMEs.
-    "motivation.md",
-    "architecture.md",
-    "guide.md",
-    "adapters.md",
-    "examples.md",
-  ],
   themeConfig: {
     nav: [
       { text: "Tutorial", link: "/tutorial" },
       { text: "Guides", link: "/guides/authorize-vs-scope" },
       { text: "Reference", link: "/reference/entry-points" },
       {
-        text: "v0.2.0",
+        text: `v${version}`,
         items: [
           { text: "npm", link: "https://www.npmjs.com/package/flue-guard" },
           { text: "Changelog", link: "https://github.com/Kirylka/flue-guard/releases" },
