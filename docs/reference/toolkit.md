@@ -165,6 +165,7 @@ toolkits.
 ```ts
 interface TrustedContext {
   actor: { id: string; roles: string[] };
+  initiator?: { id: string; roles?: string[]; tenantId?: string }; // who opened the session
   tenantId: string;
   scopes?: string[];      // allow-patterns; `*` matches any run of characters
   requestId?: string;     // correlation id, recorded on audit entries
@@ -180,3 +181,15 @@ interface ExecutionContext extends TrustedContext {
 
 `TrustedContext` is what your application binds; `ExecutionContext` is what
 `execute`, `authorize` checks, and `toModelOutput` receive.
+
+Set `initiator` when a session can change hands: a customer opens the
+conversation, an operator joins it later, and the agent then calls a tool. With
+one identity a policy cannot tell those apart. With both it can:
+
+```ts no-check
+authorize: caller((args, ctx) => ctx.initiator === undefined
+  || ctx.initiator.tenantId === ctx.tenantId),
+```
+
+When present, the audit entry records `initiatorId` beside `actorId`. Entries
+for sessions without one are unchanged, hash included.

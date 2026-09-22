@@ -18,6 +18,18 @@ export interface TrustedContext {
     /** Roles used by the default RBAC adapter. */
     roles: string[];
   };
+  /**
+   * Who opened the session, when that is not who is acting now. A long-lived
+   * conversation can change hands — a customer starts it, an operator joins —
+   * and a policy that only sees `actor` cannot tell. Set it and a check can
+   * compare the two; leave it out and nothing changes.
+   */
+  initiator?: {
+    id: string;
+    roles?: string[];
+    /** Set when the initiator's tenant can differ from `tenantId`. */
+    tenantId?: string;
+  };
   /** The tenant this run is bound to. Used for hard multi-tenant isolation. */
   tenantId: string;
   /**

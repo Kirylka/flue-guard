@@ -16,6 +16,7 @@ interface AuditEntry {
   ts: string;               // ISO timestamp
   prevHash: string;         // hash of the previous entry (GENESIS_HASH for seq 0)
   actorId: string;
+  initiatorId?: string;     // who opened the session, when the context named one
   tenantId: string;
   tool: string;
   kind?: "primitive";       // present only for broad, free-form-payload tools

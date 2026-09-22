@@ -54,6 +54,8 @@ export interface AuditEntry {
   ts: string;
   prevHash: string;
   actorId: string;
+  /** Who opened the session, when the context named someone. */
+  initiatorId?: string;
   tenantId: string;
   tool: string;
   /** Present and `"primitive"` for broad, free-form-payload tools. */

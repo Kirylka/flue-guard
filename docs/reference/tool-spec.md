@@ -26,6 +26,7 @@ interface GovernedToolSpec<TArgs, TResult> {
   guard?: ToolGuard<TArgs>;
   idempotency?: { key: (args: TArgs, ctx: TrustedContext) => string; ttlMs?: number };
   approval?: ApprovalPolicy<TArgs>;
+  canApprove?: (approver: string, args: TArgs, ctx: TrustedContext) => boolean | Promise<boolean>;
   redact?: Redactor;
   toModelOutput?: (result: TResult, ctx: ExecutionContext) => unknown;
   kind?: "scoped" | "primitive";
@@ -165,6 +166,22 @@ does not itself require approval, and does not count as a gate. A guard review
 still requires approval. Requires an `ApprovalAdapter` on
 the toolkit or the call is denied. See
 [Require human approval](/guides/require-approval).
+
+## `canApprove`
+
+`approval` decides whether a person is needed. `canApprove` decides which
+person counts. It runs only after the adapter returns an approval, and a
+`false` answer denies the call with `ApprovalDeniedError`, audited as
+`deny/approval_denied` with the rejected approver recorded.
+
+The common rule is that nobody signs off their own call:
+
+```ts no-check
+canApprove: (approver, args, ctx) => approver !== ctx.actor.id,
+```
+
+Fail-closed: if you declare `canApprove` and the adapter approves without
+naming an approver, the call is denied. There is nobody to check.
 
 ## `redact`
 

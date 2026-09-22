@@ -159,6 +159,21 @@ export interface GovernedToolSpec<TArgs, TResult> {
   };
   /** Approval policy. */
   approval?: ApprovalPolicy<TArgs>;
+  /**
+   * May *this* approver sign off *this* call? Consulted only after an approval
+   * adapter returns an approval, so it answers a question the policy cannot:
+   * the policy decides whether a human is needed, this decides which human
+   * counts. The usual rule is that the caller may not approve their own call:
+   * `canApprove: (approver, args, ctx) => approver !== ctx.actor.id`.
+   *
+   * Fail-closed: declare it and an approval that names no approver is refused,
+   * because there is nobody to check.
+   */
+  canApprove?: (
+    approver: string,
+    args: TArgs,
+    ctx: TrustedContext,
+  ) => boolean | Promise<boolean>;
   /** Redact args/result before they go to the audit log (per-tool override). */
   redact?: Redactor;
   /**
@@ -557,6 +572,9 @@ export function createGovernedToolkit(
 
       const base = {
         actorId: ctx.actor.id,
+        // Omitted for the common single-identity case, so existing entries and
+        // their hashes are unchanged.
+        ...(ctx.initiator ? { initiatorId: ctx.initiator.id } : {}),
         tenantId: ctx.tenantId,
         tool: spec.name,
         requestId: ctx.requestId,
@@ -715,6 +733,20 @@ export function createGovernedToolkit(
               spec.name,
               decision.reason ?? approval.reason,
             );
+          }
+          if (spec.canApprove) {
+            const accepted =
+              decision.approver !== undefined &&
+              (await spec.canApprove(decision.approver, args, ctx));
+            if (!accepted) {
+              await denyAudit("approval_denied", { approver: decision.approver });
+              throw new ApprovalDeniedError(
+                spec.name,
+                decision.approver === undefined
+                  ? "the approval named no approver"
+                  : `${decision.approver} may not approve this call`,
+              );
+            }
           }
           approver = decision.approver;
         }
