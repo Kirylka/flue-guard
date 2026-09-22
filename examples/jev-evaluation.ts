@@ -61,7 +61,7 @@ export async function runJevEvaluation(options: EvaluationOptions) {
       const tool = toolkit.defineGovernedTool<Record<string, string>>({
         name: item.action.tool, description: evaluationTools[item.action.tool], sideEffect: true,
         authorize: caller(() => true),
-        guard: createJevGuard({ client, model: options.model, policyId: "support-screening", policyVersion: "1",
+        guard: createJevGuard({ client, model: options.model, policyId: "support-screening",
           policy: evaluationPolicy, thresholds, timeoutMs: options.timeoutMs ?? 2000,
           state: ({ tool, args }) => ({ request: item.request, proposedAction: { tool, description: evaluationTools[item.action.tool], arguments: args },
             untrustedEvidence: item.evidence }),

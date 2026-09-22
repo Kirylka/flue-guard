@@ -38,7 +38,6 @@ const guard = createJevGuard<Reply>({
   client: new TypeSafeClient(), // reads TYPESAFE_API_KEY
   model: "jev-latest",
   policyId: "support-replies",
-  policyVersion: "1",
   policy: "Do not disclose internal notes, credentials, or other customers' data.",
   thresholds: { review: 0.3, deny: 0.8 },
   state: ({ args }) => ({ action: "Send this text to the customer", text: args.text }),
@@ -55,7 +54,9 @@ export const reply = gov.tool({
 });
 ```
 
-`state` decides what Jev gets to see, and Jev sends back a number between 0 and 1.
+`state` decides what Jev gets to see. Leave it out and it sends the tool name
+and its arguments, which is enough for a policy about the action itself. Jev
+sends back a number between 0 and 1.
 Below `review` the tool runs as usual. From `review` up, the call waits for a
 person through your [approval adapter](./require-approval). From `deny` up it is
 refused. It is also refused when Jev is down or takes longer than two seconds,

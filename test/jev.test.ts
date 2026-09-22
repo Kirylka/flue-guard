@@ -10,7 +10,7 @@ const thresholds = { review: 0.2, deny: 0.7 };
 function options(fetch: Fetch): JevGuardOptions<{ text: string }> {
   return {
     client: new TypeSafeClient({ apiKey: "test-key", fetch, logLevel: "off" }),
-    model: "pinned-model", policyId: "support", policyVersion: "1",
+    model: "pinned-model", policyId: "support",
     policy: "Only send responses relevant to the customer request.", thresholds,
     state: ({tool, args}) => ({ request: "Reply to the customer", action: { tool, text: args.text } }),
   };
@@ -34,7 +34,7 @@ for (const [probability, decision, reasons] of [
     assert.deepEqual(assessment.reasonCodes, reasons);
     assert.deepEqual(assessment.details?.probabilities, { policyViolation: probability });
     assert.equal(assessment.details?.model, "actual-model");
-    assert.equal(assessment.details?.policyVersion, "1");
+    assert.match(String(assessment.details?.policyVersion), /^[0-9a-f]{12}$/);
   });
 }
 
@@ -63,10 +63,11 @@ for (const failure of ["server", "malformed", "projector"] as const) {
   });
 }
 
-test("Jev requires valid thresholds and an explicit state projector", () => {
+test("Jev requires valid thresholds, a policy, and a callable state when given", () => {
   const config = options(async () => response());
   assert.throws(() => createJevGuard({ ...config, thresholds: { review: 0.8, deny: 0.8 } }), { code: "config_error" });
-  assert.throws(() => createJevGuard({ ...config, state: undefined } as unknown as typeof config), { code: "config_error" });
+  assert.throws(() => createJevGuard({ ...config, policy: "  " }), { code: "config_error" });
+  assert.throws(() => createJevGuard({ ...config, state: "not a function" } as unknown as typeof config), { code: "config_error" });
 });
 
 
@@ -162,4 +163,35 @@ test("threshold configuration remains stable when caller mutates its configurati
   config.thresholds.deny = 1;
   const assessment = await guard.evaluate({ tool: "reply", args: { text: "Hello" }, ctx: { ...context, authorizedScopes: [] } });
   assert.equal(assessment.decision, "deny");
+});
+
+test("the policy alone is required: state defaults to the tool and its arguments", async () => {
+  let payload: Record<string, unknown> | undefined;
+  const config = options(async (_url, init) => {
+    payload = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    return response();
+  });
+  delete (config as { state?: unknown }).state;
+  delete (config as { policyId?: unknown }).policyId;
+  const guard = createJevGuard(config);
+  const assessment = await guard.evaluate({
+    tool: "reply", args: { text: "Hello" },
+    ctx: { ...context, authorizedScopes: [], attributes: { secret: "do-not-send" } },
+  });
+  assert.deepEqual(payload?.state, { tool: "reply", args: { text: "Hello" } });
+  assert.equal(JSON.stringify(payload).includes("do-not-send"), false);
+  assert.equal(assessment.details?.policyId, undefined);
+});
+
+test("the recorded policy version is derived from the policy text, so it cannot go stale", async () => {
+  const version = async (policy: string) => {
+    const guard = createJevGuard({ ...options(async () => response()), policy });
+    const assessment = await guard.evaluate({
+      tool: "reply", args: { text: "Hello" }, ctx: { ...context, authorizedScopes: [] },
+    });
+    return assessment.details?.policyVersion;
+  };
+  const first = await version("Do not disclose internal notes.");
+  assert.equal(first, await version("Do not disclose internal notes."));
+  assert.notEqual(first, await version("Do not disclose internal notes. Do not promise refunds."));
 });

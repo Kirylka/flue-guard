@@ -32,7 +32,7 @@ const guard = createJevGuard({
       policyViolation: { type: "noul", noul: probability },
     } });
   } }),
-  model: "fixture", policyId: "reset", policyVersion: "1", policy: "Reset only when requested.",
+  model: "fixture", policyId: "reset", policy: "Reset only when requested.",
   thresholds: { review: 0.3, deny: 0.8 },
   state: ({ tool, args }) => ({ request: "Reset my password", action: { tool, args } }),
 });

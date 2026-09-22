@@ -39,7 +39,7 @@ try {
     import { createJevGuard } from 'flue-guard/jev';
     import { TypeSafeClient } from '@typesafe-ai/sdk';
     const client = new TypeSafeClient({apiKey:'synthetic', logLevel:'off', fetch: async()=>Response.json({model:'test',usage:{input_tokens:1,output_tokens:1},answers:{policyViolation:{type:'noul',noul:0}}})});
-    const guard = createJevGuard({client,model:'test',policyId:'test',policyVersion:'1',policy:'Help the user',thresholds:{review:0.3,deny:0.8},state:()=>({request:'help',action:'help'})});
+    const guard = createJevGuard({client,model:'test',policy:'Help the user',thresholds:{review:0.3,deny:0.8},state:()=>({request:'help',action:'help'})});
     assert.equal((await guard.evaluate({tool:'read',args:{},ctx:{actor:{id:'test',roles:[]},tenantId:'test',authorizedScopes:[]}})).decision,'allow');
   `);
   console.log("Packed package: core works without SDK; optional adapter works when SDK is installed.");
