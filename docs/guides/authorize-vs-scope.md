@@ -1,17 +1,17 @@
 # Choose authorize vs scope
 
-Both are per-call gates that compare the model's untrusted arguments against
-the trusted context. They answer different questions:
+Both run on every call. Both compare the arguments the model wrote with what
+your application knows about the caller. They answer different questions:
 
 | Gate | Question it answers | Use when |
 | --- | --- | --- |
 | `scope` | "Is this call inside the caller's allowed territory?" | The grant is enumerable up front: tenants, customer lists, entitlements |
 | `authorize` | "Is this caller allowed to do this to this target?" | The answer needs a lookup: ownership, record state, a server-side anchor |
 
-A side-effecting tool must declare at least one gate (`scope`, `authorize`,
-`requireRoles`, or `approval`) or it refuses to define with a
-`GovernanceConfigError`. That refusal is the point: the missing check can't
-ship by accident.
+A tool with `sideEffect: true` must declare at least one check: `scope`,
+`authorize`, `requireRoles`, or `approval`. Without one, defining the tool
+throws `GovernanceConfigError`. That is on purpose: a tool with no check fails
+at startup instead of in production.
 
 Every example below uses this toolkit:
 
@@ -24,9 +24,9 @@ const gov = govern({ audit: "audit.jsonl" });
 
 ## Gate by scope: enumerable grants
 
-Declare what the call *wants to touch*; the library compares it to the
-`scopes` your application put on the trusted context. You never write the
-comparison, so you can't forget to involve the caller.
+You declare what the call *wants to touch*. The library compares that with the
+`scopes` your application put on the context. You never write the comparison
+yourself, so you cannot forget to include the caller in it.
 
 ```ts
 declare const billing: {
@@ -57,24 +57,26 @@ export const trustedCtx: TrustedContext = {
 };
 ```
 
-A call whose derived scope isn't covered throws `ScopeViolationError` and is
-audited as `deny/scope_violation`. Scope strings are recorded **unredacted**
-(they're the forensic index), so build them from stable ids, never secrets.
+A call outside the caller's scopes throws `ScopeViolationError`. The log shows
+it as `deny/scope_violation`. Scope strings are written to the log
+**unmasked**, because that is how you search it later. Build them from stable
+ids, never from secrets.
 
-Two fail-closed rules to know:
+Two rules that refuse rather than allow:
 
-- If `scope` is the tool's **only** gate and a call derives no scopes, the
-  call is refused, because an empty derivation would otherwise be vacuously
-  "in scope".
-- `ctx.scopes` is optional. Omit it for actors that only use
-  `authorize`-gated tools; an empty list denies every scoped call.
+- If `scope` is the tool's **only** check and returns no scopes for a call,
+  the call is refused. An empty list would otherwise count as "nothing out of
+  scope" and let the call through.
+- `ctx.scopes` is optional. Leave it out for callers that only use tools
+  checked by `authorize`. An empty list refuses every call to a scoped tool.
 
 ## Gate by authorize: looked-up answers
 
-When "allowed?" needs a lookup a static list can't capture (account
-ownership, the state of a record), use `authorize`. It is keyed to a
-**declared trusted anchor**, so the classic bug (comparing an argument against
-nothing trusted) has no shape you can write.
+Some answers need a lookup that a fixed list cannot hold: who owns an account,
+what state a record is in. Use `authorize` for those. Every `authorize` check
+names what it compares against: the caller, or a lookup you registered. So you
+cannot write the usual bug: a check that looks only at the arguments and never
+at anything your server knows.
 
 **Anchor 1: the authenticated caller.** The common case:
 
@@ -94,16 +96,15 @@ export const closeAccount = gov.tool({
 ```
 
 ::: tip Annotate the argument type
-TypeScript cannot infer `caller`'s argument type from the surrounding
-`gov.tool` literal (the helper call is resolved before `parameters` is), so
-state it: `caller((a: { accountId: string }, ctx) => …)`. The plain-object
-form `authorize: { anchor: "caller", check: (a, ctx) => … }` infers fully if
-you prefer zero annotations.
+TypeScript cannot work out the type of `a` inside `caller(...)`, because it
+reads `caller` before `parameters`. So write it out:
+`caller((a: { accountId: string }, ctx) => …)`. If you prefer no annotation,
+the object form `{ anchor: "caller", check: (a, ctx) => … }` infers the type.
 :::
 
-**Anchor 2: a registered trusted source.** For anonymous-recovery flows where
-there is no authenticated actor. The named source is resolved server-side and
-its value handed to your check:
+**Anchor 2: a lookup you registered.** For account recovery, where nobody is
+logged in. Your server runs the named lookup and passes the result to your
+check:
 
 ```ts
 declare const accounts: { emailOnFile(accountId: string): Promise<string> };
@@ -112,7 +113,7 @@ declare const accounts: { emailOnFile(accountId: string): Promise<string> };
 const govWithSources = govern({
   audit: "audit.jsonl",
   trustedSources: {
-    accountEmail: (args) => accounts.emailOnFile((args as { accountId: string }).accountId),
+    accountEmail: (a: { accountId: string }) => accounts.emailOnFile(a.accountId),
   },
 });
 
@@ -129,15 +130,15 @@ export const recoverAccount = govWithSources.tool({
 });
 ```
 
-Referencing an unregistered source name fails at definition time, not at call
-time. A false answer from either anchor throws `AuthorizationDeniedError` and
-audits as `deny/authorization_denied`.
+A name that was never registered fails when the tool is defined, not when it
+is called. A `false` answer from either kind of check throws
+`AuthorizationDeniedError`, logged as `deny/authorization_denied`.
 
 ## Combine them
 
-Gates are independent pipeline steps: declare several and they all run, in a
-fixed order (`RBAC -> scope -> authorize -> approval`). A typical high-risk tool
-uses each for what it's best at:
+Each check is its own step. Declare several and they all run, always in the
+same order: `requireRoles`, `scope`, `authorize`, `guard`, `approval`. A risky tool can
+use each one for what it does best:
 
 ```ts
 declare const accounts: { ownedBy(accountId: string, actorId: string): Promise<boolean> };
@@ -160,13 +161,14 @@ export const transferDomain = gov.tool({
 
 ## When neither can help: primitives
 
-`scope` and `authorize` govern tools with a structured *target*. A free-form
-payload (raw SQL, shell, arbitrary HTTP) has no target an in-process check
-can bind. Declare those `kind: "primitive"`; a side-effecting primitive
-refuses to define unless you set `egressControlled: true`, your attestation
-that its blast radius is bounded out-of-band. See
-[the trust model](/explanation/trust-model#primitives-are-attested-not-enforced)
-for what that flag does and doesn't mean.
+`scope` and `authorize` need a clear *target*, like an account id. Raw SQL, a
+shell command, or an arbitrary HTTP request has no target to check: the text
+itself is what does the damage. Mark those tools `kind: "primitive"`. One that
+changes data will not load until you also set `egressControlled: true`. That
+flag is your statement that something outside this library limits what the
+tool can reach, such as a network allowlist or a read-only database user. See
+[the trust model](/explanation/trust-model#free-form-tools-are-declared-not-checked)
+for what the flag does and does not do.
 
 ## Related
 

@@ -1,10 +1,10 @@
 # Verify & protect the audit log
 
-Every governed call appends one entry (two for side effects: intent +
-outcome) to an `AuditLog`. Each entry stores the SHA-256 hash of the previous
-entry, so the log is a chain: altering or deleting any historical line breaks
-every hash after it. This guide covers proving that, strengthening it with an
-HMAC key, and the operational limits.
+Every governed call adds one entry to the audit log. A tool that changes data
+adds two: one before it runs and one after. Each entry stores the SHA-256 hash
+of the entry before it, so the entries form a chain. Change or delete any past
+line, and every hash after it stops matching. This guide shows how to check
+that, how to make it stronger with an HMAC key, and where its limits are.
 
 ## Verify a chain
 
@@ -24,17 +24,17 @@ console.log(await audit.verify());
 console.log(await verifyChain(await audit.entries()));
 ```
 
-`brokenAt` is the sequence number of the first inconsistent entry: the exact
-line someone edited, reordered, or deleted after. (The
+`brokenAt` is the number of the first entry that does not match: the line
+someone edited, moved, or deleted something after. (The
 [tutorial](/tutorial#_5-try-to-tamper-with-it) walks through breaking one on
 purpose; [`examples/audit-viewer.html`](https://github.com/Kirylka/flue-guard/blob/main/examples/audit-viewer.html)
 does the same in a browser, no build required.)
 
 ## Add an HMAC key
 
-A plain hash chain proves *continuity*: no line was changed after being
-written. It cannot stop an attacker with file access from rewriting the whole
-file and recomputing every hash. Key the chain and it can:
+A plain hash chain proves that no single line was changed after it was
+written. It cannot stop someone with access to the file from rewriting the
+whole file and computing every hash again. An HMAC key stops that:
 
 ```ts
 import { HashChainAuditLog } from "flue-guard/audit";
@@ -48,59 +48,54 @@ const audit = new HashChainAuditLog({
 console.log(await audit.verify());
 ```
 
-Without the key, a forged chain can't produce valid MACs. Keep the key out of
-the environment the agent's tools run in (a verifier-side secret is ideal).
-An **empty** `hmacKey` is rejected with `GovernanceConfigError`, because an
-empty string is almost always an unset environment variable, and treating it as "no
-key" would silently downgrade the guarantee.
+Without the key, nobody can produce a chain that passes verification. Keep the
+key away from the machine where the agent's tools run. Ideally only the side
+that verifies the log has it.
+
+An **empty** `hmacKey` is rejected with `GovernanceConfigError`. An empty
+string is almost always an environment variable that was never set, and
+treating it as "no key" would quietly make the log weaker.
 
 ## Know what is (and isn't) redacted
 
-Redaction runs on what gets *written to the log*, never on what the handler
-executes with. The default redactor masks common sensitive field names
-(`password`, `token`, `cardNumber`, …) plus emails and long digit runs inside
-strings. Swap or extend it globally, or per tool:
+Masking applies only to what is *written to the log*. Your handler always gets
+the real values. By default, fields with sensitive names (`password`, `token`,
+`cardNumber`, …) are masked, and so are emails and long runs of digits inside
+strings.
+
+To use a stronger masking library for the whole log, wrap its string function:
 
 ```ts
-import * as v from "valibot";
 import { govern } from "flue-guard";
 import { textRedactor } from "flue-guard/adapters";
 
-declare const redactString: (s: string) => string; // e.g. from a PII library
+declare const maskPersonalData: (text: string) => string; // from your PII library
 
-const gov = govern({
-  audit: "audit.jsonl",
-  redaction: textRedactor(redactString), // global: walks objects, masks fields + strings
-});
-
-export const lookupCustomer = gov.tool({
-  name: "lookup_customer",
-  description: "Fetch a customer profile.",
-  parameters: v.object({ customerId: v.string() }),
-  redact: (value) => "[custom per-tool redaction]", // per-tool override
-  execute: async (a) => ({ id: a.customerId }),
-});
+// Still masks sensitive field names, and runs every string through your function.
+const gov = govern({ audit: "audit.jsonl", redaction: textRedactor(maskPersonalData) });
 ```
 
-Deliberately **not** redacted, because they are the log's correlation index:
+To add fields for a single tool, set `redact` on that tool. See
+[Shape what the model sees](/guides/shape-model-output#keep-secrets-out-of-the-audit-with-redact).
+
+Two things are **not** masked, because they are how you find related entries:
 **idempotency keys** and **requested scopes**. Build both from stable ids,
-never secrets or PII. Error strings *are* run through the redactor, since an
-exception message can carry a secret the handler touched.
+never from secrets or personal data. Error messages *are* masked, because an
+exception can carry a secret the handler touched.
 
 ## Operational limits
 
-- The file sink is single-writer. `HashChainAuditLog` serializes appends
-  within one instance; two processes (or two instances) writing the same file
-  will assign duplicate sequence numbers and break the chain. Multi-instance
-  deployments need a sink with an atomic append: a database, or the D1
-  reference adapter ([Cloudflare guide](/guides/cloudflare-workers)).
-- If the audit sink fails, the call fails. For side effects the intent
-  record is written *before* the handler, and a failed append aborts the
-  call, so a side effect can never run unrecorded.
-- Audit values are normalized to JSON-safe form before hashing:
-  `bigint` becomes a decimal string, circular structures become `[Circular]`,
-  and non-finite numbers become `null`, so a hostile or odd tool result
-  can't break the receipt.
+- Only one process may write a log file. `HashChainAuditLog` puts writes in
+  order inside one process. Two processes writing the same file will reuse
+  entry numbers and break the chain. With several instances, use a store that
+  appends atomically: a database, or the D1 example in the
+  [Cloudflare guide](/guides/cloudflare-workers).
+- If writing to the log fails, the call fails. For a tool that changes data,
+  the first entry is written *before* your code runs. If that write fails,
+  your code does not run, so a change can never happen without a record.
+- Odd values are converted before hashing: `bigint` becomes a string, a loop
+  of references becomes `[Circular]`, and `NaN` or `Infinity` becomes `null`.
+  A strange tool result cannot stop the entry from being written.
 
 ## Related
 

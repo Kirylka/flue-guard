@@ -1,79 +1,78 @@
 # The pipeline
 
-Every call to a governed tool runs the same fixed sequence. No step is
-skippable, the order never varies, and any step can stop the call.
+Every call to a governed tool goes through the same steps in the same order.
+No step can be skipped, and any step can stop the call.
 
 ```
-context -> validate -> RBAC -> scope -> authorize -> guard -> approval
+context -> validate -> roles -> scope -> authorize -> guard -> approval
         -> idempotency -> execute -> audit
 ```
 
 ## The steps
 
-1. **Context.** The trusted context is resolved (from the ambient
-   `ContextStore` bound by `run(...)`, or the fixed value from
-   `withContext(...)`). No context, no call: `MissingContextError`, and even
-   that refusal is audited.
-2. **Validate.** The raw model arguments are parsed. A Valibot `parameters`
-   schema was already applied by Flue before the tool ran; other validators
-   run here. Invalid arguments deny the call before any gate sees them.
-3. **RBAC.** `requireRoles` against the adapter (any-of role match by
-   default). Coarse, cheap, first.
-4. **Scope.** The tool derives what this call touches; the library compares
-   it against what the context allows. This is the tenant-isolation step.
-5. **Authorize.** The per-call predicate, anchored to the caller or a
-   registered trusted source. This is the ownership step.
-6. **Guard.** An optional semantic assessment allows, denies, or requires review.
-   Errors and timeouts block the call.
-7. **Approval.** If the policy triggers or the guard requires review, the adapter answers approve, deny,
-   or pending; pending suspends the call before anything ran.
-8. **Idempotency.** The key is claimed atomically. A completed record within
-   TTL short-circuits to the stored result; an in-flight claim refuses the
-   call.
-9. **Execute.** Your handler, with validated args and the
+1. **Context.** Find out who is calling: from `run(...)`, or from the value
+   given to `withContext(...)`. No caller means no call
+   (`MissingContextError`), and that refusal is logged too.
+2. **Validate.** Check the arguments the model wrote. Flue has already checked
+   a Valibot `parameters` schema. Other validators run here. Invalid arguments
+   stop the call before any check sees them.
+3. **Roles.** `requireRoles`, matched against the caller's roles. By default
+   any one listed role is enough. It is the cheapest check, so it runs first.
+4. **Scope.** The tool says what this call touches. The library compares that
+   with what the caller may touch. This step keeps tenants apart.
+5. **Authorize.** Your own check, tied to the caller or to a lookup you
+   registered. This is where ownership is checked.
+6. **Guard.** An optional check that reads the call itself and allows it,
+   refuses it, or asks for review. If it fails or times out, the call stops.
+7. **Approval.** If the policy asks for it, or the guard asked for review, the
+   adapter answers approved, denied, or pending. Pending stops the call before
+   anything has run.
+8. **Idempotency.** The key is claimed atomically. If the same key finished
+   within the TTL, the stored result is returned. If it is still running, the
+   call is refused.
+9. **Execute.** Your handler runs with the checked arguments and the
    `ExecutionContext`.
-10. **Audit.** Interleaved with all of the above rather than last: each
-   step's verdict is appended to the hash chain as it happens.
+10. **Audit.** Not really a last step. Each step writes its result to the log
+   as it happens.
 
-The order encodes a policy: cheap, static checks run before expensive,
-dynamic ones, and everything runs before the side effect. Approval comes
-after authorization so a human is only asked about calls the caller could
-legitimately make. Idempotency comes last so a replayed call is one that
-passed every gate on its first run and would have passed them again.
+The order is deliberate. Cheap, fixed checks run before slow ones that need a
+lookup, and all of them run before anything changes. Approval comes after
+`authorize`, so a person is only asked about calls the caller is allowed to
+make. Idempotency comes last, so a stored result is only returned to a call
+that passed every check again.
 
 ## What lands in the log
 
 | Situation | Records written (`decision`/`outcome`) |
 | --- | --- |
 | Allowed, no side effect | `allow/success` |
-| Allowed, `sideEffect: true` | `allow/executing` (intent, before the handler), then `allow/success` |
-| Handler threw | intent (if side-effecting), then `allow/error` |
-| Any gate refused | `deny/denied`, with the error code |
+| Allowed, `sideEffect: true` | `allow/executing` before the handler, then `allow/success` |
+| Handler threw | `allow/executing` if it changes data, then `allow/error` |
+| Any check refused | `deny/denied`, with the error code |
 | Approval pending | `defer/pending`, with the adapter's `ref` |
-| Idempotent replay | `allow/replayed`, with the stored result |
-| Guard evaluation failed or timed out | `deny/error`, code `guard_unavailable` |
-| Governance step itself crashed | `deny/error`, code `governance_error: …` |
+| Stored result returned | `allow/replayed`, with the stored result |
+| Guard failed or timed out | `deny/error`, code `guard_unavailable` |
+| A check itself crashed | `deny/error`, code `governance_error: …` |
 
-Two invariants hold everywhere:
+Two rules hold for every call:
 
-- A side effect can never run unrecorded. The `executing` intent is
-  appended before the handler; if the append fails, the handler never runs.
-- Every decision is on the chain. Denials, deferrals, replays, handler
-  errors, and even exceptions thrown by a gate or an adapter are recorded
-  (the catch-all writes exactly one record for exceptions no step recorded).
+- A change never happens without a record. The `executing` entry is written
+  before the handler. If that write fails, the handler does not run.
+- Every decision is in the log: refusals, pending approvals, stored results,
+  handler errors, and errors thrown by a check or an adapter. An error that no
+  step recorded is written exactly once by a final catch.
 
 ## Where the pieces live
 
-`createGovernedToolkit` is the composition root: it holds the cross-cutting
-collaborators (audit log, idempotency store, RBAC/approval/redaction
-adapters, context resolution) and every tool defined from it shares them.
-The spec you write per tool contributes only the call-specific logic: the
-schema, the gates, the key, the handler.
+`createGovernedToolkit` holds everything the tools share: the audit log, the
+idempotency store, the adapters for roles, approval, and masking, and the way
+the caller is found. Every tool you define from it uses the same ones. Each
+tool's spec only adds what is specific to that tool: its schema, its checks,
+its key, its handler.
 
-The Flue-specific surface is one adapter module. `toFlueTool` maps the
-governed intermediate onto Flue's `ToolDefinition` contract
-(`input`/`run({ data, signal })`, verified against `@flue/runtime` 2.0.8),
-and `govern()` pre-wires Flue's `defineTool`. The governance core itself
-never imports Flue, which is what keeps definition-time checks testable
-without a harness and lets `createGovernedToolkit` accept a different
-`defineTool` if you ever need to wire one yourself.
+Everything specific to Flue lives in one small module. `toFlueTool` turns a
+governed tool into Flue's `ToolDefinition` (`input` and
+`run({ data, signal })`, tested against `@flue/runtime` 2.0.8), and `govern()`
+passes Flue's `defineTool` in for you. The rest of the library never imports
+Flue. That is why its checks can be tested without Flue, and why
+`createGovernedToolkit` accepts your own `defineTool` if you need one.

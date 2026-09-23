@@ -21,8 +21,8 @@ verify later.
 
 You want it as soon as a tool does something real. An agent that reads a public
 help article is fine without a gate. One that resets a password, issues a
-refund, or closes an account is not: the model picks the account id, and a
-careful prompt is not a check. flue-guard refuses to define a side-effecting
+refund, or closes an account is not. The model picks the account id there,
+and a careful prompt is not a check. flue-guard refuses to define a side-effecting
 tool that has no gate at all, so the missing check cannot ship by accident.
 
 ## Quickstart
@@ -92,16 +92,16 @@ await dispatch(SupportAgent, {
 });
 ```
 
-The tool checks ownership before the side effect, replays a completed retry,
-and records governance decisions in a hash-chained audit log. Flue performs
-input validation before calling the guard; failures at that earlier layer
-appear in Flue's events, not the governance log.
+The tool checks that the caller owns the account before it sends anything. A
+retry of a finished call returns the first result. Every decision goes into
+the audit log. Arguments that fail the schema never reach flue-guard: Flue
+rejects them first, and they show up in Flue's events, not in this log.
 
-The model controls the arguments; your application controls the identity.
-Use `withContext` inside dispatched agents because their execution is detached
-from the request. `gov.run(context, fn)` supplies ambient context for direct
-calls that execute within `fn`; wrapping `dispatch()` or `init().dispatch()`
-in it does not bind the later agent execution.
+The caller's identity comes from your server, never from the conversation.
+Flue runs a dispatched agent separately from your request, so the identity
+travels with the signal and the agent binds it with `withContext`.
+[Run on Cloudflare Workers](https://kirylka.github.io/flue-guard/guides/cloudflare-workers#_3-bind-context-per-invocation-when-flue-dispatches)
+explains why `gov.run` around `dispatch()` is not enough.
 
 ## Documentation
 
@@ -112,7 +112,7 @@ in it does not bind the later agent execution.
 | [Reference](https://kirylka.github.io/flue-guard/reference/entry-points) | Every entry point, tool-spec field, error, and adapter interface |
 | [Explanation](https://kirylka.github.io/flue-guard/explanation/why-flue-guard) | Why it exists, the pipeline, the trust model |
 
-## Sharp edges
+## Things to know
 
 - Results must be JSON-plain. Flue serializes what the model sees (the
   handler's return, or `toModelOutput`'s) and rejects `bigint`, `Date`, class
@@ -120,9 +120,9 @@ in it does not bind the later agent execution.
 - Use Valibot for `parameters`. Any other validator still governs and
   validates internally, but Flue's schema guidance for the model degrades to
   an unconstrained object. With Valibot, the model sees the real shape.
-- Idempotency keys and requested scopes are audited unredacted (they are the
-  log's correlation index). Build them from stable ids, never from secrets
-  or PII.
+- Idempotency keys and requested scopes are written to the log unmasked,
+  because that is how you find related entries. Build them from stable ids,
+  never from secrets or personal data.
 - The file audit sink is single-writer: one process, one instance. For
   multi-instance deployments use a store-backed sink such as the
   [D1 reference adapter](https://github.com/Kirylka/flue-guard/blob/main/examples/cloudflare-adapters.ts).
@@ -137,9 +137,8 @@ in it does not bind the later agent execution.
 | `flue-guard/testing` | in-memory test doubles |
 | `flue-guard/jev` | `createJevGuard` (experimental; needs `@typesafe-ai/sdk`) |
 
-`govern()` is the way in. `createGovernedToolkit` is the explicit form of the
-same toolkit, with Flue's `defineTool` injected by you instead of for you, for
-when you want to control that wiring yourself.
+Start with `govern()`. `createGovernedToolkit` builds the same toolkit, but you
+pass Flue's `defineTool` to it yourself.
 
 ## See it run
 

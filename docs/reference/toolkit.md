@@ -43,8 +43,8 @@ const toolkit = createGovernedToolkit({
 });
 ```
 
-(The cast bridges Flue's generic `defineTool` signature to the non-generic
-injection seam; `govern` performs the same cast internally.)
+(The cast is needed because Flue's `defineTool` is generic and this option is
+not. `govern` does the same cast inside.)
 
 ## `GovernedToolkitOptions`
 
@@ -60,10 +60,9 @@ injection seam; `govern` performs the same cast internally.)
 | `redaction` | `Redactor` | `defaultRedactor` | Applied to args, results, and error strings before they are written to the audit log. |
 | `clock` | `() => number` | none | Injectable clock for deterministic audit timestamps in tests. |
 
-`audit` has no default on purpose. A toolkit that quietly records nothing is the
-one you find out about after the incident, so the option is required and you
-have to write down which sink you want. When you genuinely want none — a test, a
-throwaway script, a snippet you just want to run — say so:
+`audit` has no default on purpose. If a toolkit recorded nothing by default,
+you would only notice after an incident. So you have to say which log you
+want. When you really want none, for a test or a quick script, say so:
 
 ```ts
 import { govern } from "flue-guard";
@@ -71,7 +70,7 @@ import { govern } from "flue-guard";
 const gov = govern({ audit: false }); // keeps no record
 ```
 
-Every gate still runs. You only lose the receipt.
+Every check still runs. You only lose the record.
 
 ## `GovernedToolkit`
 
@@ -112,14 +111,16 @@ Standard Schema and the argument type of `scope`, `idempotency.key`,
 
 The lower-level form: wraps a spec into a `FlueCompatibleTool` (the governed
 intermediate with an `execute(args, hostContext?, signal?)` method). Adapt it
-for Flue with [`toFlueTool`](/reference/adapters#toflueltool-and-hostcontextresolver)
+for Flue with [`toFlueTool`](/reference/adapters#tofluetool-and-hostcontextresolver)
 and Flue's `defineTool`. Argument types come from the explicit `TArgs`
 generic.
 
-Both definition methods validate the spec eagerly and throw
-`GovernanceConfigError` at definition time for: a side-effecting tool without
-a gate, a side-effecting primitive without `egressControlled`, and an
-`authorize` that references an unregistered trusted source.
+Both methods check the spec when the tool is defined, not when it is called.
+They throw `GovernanceConfigError` for three mistakes:
+
+- a tool with `sideEffect: true` and no check;
+- a primitive with `sideEffect: true` and no `egressControlled`;
+- an `authorize` that names a trusted source nobody registered.
 
 ### `toolkit.withContext(context)`
 

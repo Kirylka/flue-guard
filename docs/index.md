@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: flue-guard
-  text: Governance layer for Flue tools
-  tagline: Per-call authorization, idempotency, and a tamper-evident audit trail for agent tools, in-process.
+  text: Checks for Flue agent tools
+  tagline: Decide who may call a tool before it runs, never run a side effect twice, and keep a log you can verify.
   actions:
     - theme: brand
       text: Tutorial (5 minutes)
@@ -18,25 +18,25 @@ hero:
 
 features:
   - icon: 🚫
-    title: Fail-closed authorization
-    details: A side-effecting tool won't even define without a gate. Every call checks the untrusted arguments against the trusted caller context before the handler runs.
+    title: Refuses by default
+    details: A tool that changes data will not even load without a check. Every call compares the model's arguments with the real caller before your code runs.
   - icon: 🔁
     title: Safe retries
-    details: Declare an idempotency key and an agent retry replays the first result instead of refunding, emailing, or resetting twice.
+    details: Give a tool an idempotency key, and a retried call returns the first result instead of refunding, emailing, or resetting a second time.
   - icon: 🧾
-    title: Tamper-evident audit
-    details: Every decision is hash-chained into an append-only log. Edit any past line and verifyChain() points at it; add an HMAC key and a full rewrite can't be forged either.
+    title: A log you can verify
+    details: Every decision is written to a log where each line holds the hash of the one before. Edit any past line and verifyChain() names it. With an HMAC key, rewriting the whole file fails too.
   - icon: 🧩
-    title: Native to Flue
-    details: gov.tool() returns a real Flue ToolDefinition. One flag on Cloudflare Workers; identical decisions and hashes on every Flue target.
+    title: Built for Flue
+    details: gov.tool() returns a real Flue ToolDefinition. The same decisions and the same hashes on every runtime Flue supports.
 ---
 
-## Thirty seconds
+## In thirty seconds
 
-Flue's own guidance: *"a tool's parameters are model-selected inputs, not an
-authorization boundary."* flue-guard is that boundary. The model controls the
-arguments; your application controls the context. Every call is decided by
-comparing the two, then written to a hash-chained receipt.
+Flue's own guidance says *"a tool's parameters are model-selected inputs, not
+an authorization boundary."* The model writes the arguments. Your application
+knows who the caller is. flue-guard compares the two on every call, and writes
+the result to a log.
 
 ```ts
 import * as v from "valibot";
@@ -47,18 +47,19 @@ declare const accounts: {
   sendResetLink(accountId: string): Promise<void>;
 };
 
-const gov = govern({ audit: "audit.jsonl" }); // hash-chained JSONL receipt
+const gov = govern({ audit: "audit.jsonl" });
 
 export const resetPassword = gov.tool({
   name: "reset_password",
   description: "Send a password reset link.",
   parameters: v.object({ accountId: v.string() }),
   sideEffect: true,
-  // The check that was missing in the Meta incident:
+  // Only the owner of the account may reset it.
   authorize: caller(
     (a: { accountId: string }, ctx) => accounts.ownedBy(a.accountId, ctx.actor.id),
   ),
-  idempotency: { key: (a) => `reset:${a.accountId}` }, // a retry won't send twice
+  // A retry of the same reset returns the first result instead of sending again.
+  idempotency: { key: (a) => `reset:${a.accountId}` },
   execute: async (a) => {
     await accounts.sendResetLink(a.accountId);
     return "Sent.";
@@ -66,11 +67,5 @@ export const resetPassword = gov.tool({
 });
 ```
 
-For dispatched Flue 2 agents, call `gov.withContext(trustedContext)` inside
-the agent function, then mount `bound.tool(...)` with `useTool`. Derive the
-caller from authenticated signal attributes returned by `useDelivery()`.
-An ambient `gov.run(...)` around dispatch does not reach the detached agent
-execution. See the [dispatched-agent example](/guides/cloudflare-workers#_3-bind-context-per-invocation-when-flue-dispatches).
-
-Start with the [tutorial](/tutorial): from `npm i` to a denied call and a
-verified audit line in under five minutes.
+Start with the [tutorial](/tutorial). In five minutes you get a refused call
+and a log you verify yourself.

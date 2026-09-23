@@ -1,13 +1,13 @@
 # Adapters
 
-Every moving part of the pipeline is an interface with a working default.
-The interfaces live on the package root (`flue-guard`); the built-in
-implementations live on `flue-guard/adapters`. Swap any of them in
-`govern(...)` options without touching a tool.
+Each replaceable part of the pipeline is an interface with a working default.
+The interfaces are exported from `flue-guard`. The built-in versions are in
+`flue-guard/adapters`. Replace any of them in the `govern(...)` options without
+changing a tool.
 
-| Seam | Interface | Default | Swap in for |
+| Part | Interface | Default | Replace with |
 | --- | --- | --- | --- |
-| Audit | `AuditLog` | `HashChainAuditLog` (file path) | A database, D1, a WORM store |
+| Audit | `AuditLog` | `HashChainAuditLog` (file path) | A database, D1, append-only storage |
 | Idempotency | `IdempotencyStore` | `InMemoryIdempotencyStore` | Redis, Postgres, KV, Durable Objects |
 | RBAC | `RbacAdapter` | `defaultRbac` | OPA, a permissions service |
 | Approval | `ApprovalAdapter` | none (fail closed) | Slack, tickets, a review UI |
@@ -185,10 +185,10 @@ export const ping = defineTool(
 );
 ```
 
-`toFlueTool` maps the governed intermediate onto Flue's 2.x contract: a
-genuine Valibot `parameters` schema becomes the tool's `input` as-is; any
-other validator becomes an unconstrained object passthrough (arguments still
-arrive for internal validation, but the model gets no schema guidance). The
+`toFlueTool` turns a governed tool into Flue's 2.x tool shape. A Valibot
+`parameters` schema becomes the tool's `input` unchanged. Any other validator
+becomes an open object: the arguments still arrive and are checked inside,
+but the model gets no description of their shape. The
 governed handler runs from Flue's `run({ data, signal })`. Its result is
 wrapped in `{ output }`, including when the result itself contains `output`
 or `terminate` properties. Those fields remain application data.

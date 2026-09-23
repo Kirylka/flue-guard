@@ -1,8 +1,8 @@
 # Tutorial: your first governed tool
 
-In the next five minutes you will build a Flue tool that sends password-reset
-links, watch flue-guard refuse it when the caller doesn't own the account, and
-prove afterwards, cryptographically, exactly what happened.
+In the next five minutes you will build a Flue tool that sends password reset
+links. You will watch flue-guard refuse a call for an account the caller does
+not own. Then you will check the log and see that it cannot be edited unnoticed.
 
 You need Node.js **22.19 or newer** (`node --version`), which runs TypeScript
 files directly.
@@ -71,11 +71,11 @@ await gov.run(
 console.log("audit chain:", await audit.verify());
 ```
 
-`gov.tool(...)` returns a real Flue `ToolDefinition`, and the script invokes it
-through its `run({ data })` handler. This exercises governance directly;
-Flue's model loop additionally validates the input schema before calling
-`run` and consumes the returned `{ output }` envelope. The model chooses the
-arguments, which is exactly why the ownership check exists.
+`gov.tool(...)` returns a normal Flue `ToolDefinition`. The script calls its
+`run({ data })` directly. That is the same method Flue calls when the model
+picks the tool.
+In a real agent the model chooses `accountId`. That is exactly why the
+ownership check exists.
 
 ## 3. Run it
 
@@ -95,9 +95,9 @@ audit chain: { valid: true }
 The first call executed. The second was refused *before* `execute` ran: no
 reset link for Bob's account was ever sent.
 
-## 4. Read the receipt
+## 4. Read the log
 
-Every call was recorded in `audit.jsonl`. Create `verify-audit.ts`:
+Every call was written to `audit.jsonl`. Create `verify-audit.ts`:
 
 ```ts
 // verify-audit.ts
@@ -121,9 +121,9 @@ node verify-audit.ts
 { valid: true }
 ```
 
-Three entries: a side-effecting call writes an `executing` intent *before* the
-handler runs and an outcome after (so a side effect can never run unrecorded),
-and the denial is on the record too.
+Three entries. A tool that changes something writes an `executing` entry
+*before* it runs and a result entry after, so a side effect can never happen
+without a record. The refused call is recorded too.
 
 ## 5. Try to tamper with it
 
@@ -139,16 +139,16 @@ node verify-audit.ts
 { valid: false, brokenAt: 0, reason: 'content hash mismatch at seq 0' }
 ```
 
-The rewritten history no longer matches its own hash, and verification points
-at the exact line. That is what "tamper-evident" means here, and you have
-now demonstrated it yourself.
+The edited line no longer matches its own hash, and verification names that
+exact line. That is what "tamper-evident" means here, and you just saw it
+happen.
 
 ## Where to go next
 
-You have a governed tool: hand it to your agent like any other Flue tool and
-bind context inside the agent function with `gov.withContext(...)` using
-authenticated `useDelivery()` attributes. An ambient `gov.run(...)` around
-dispatch does not reach the detached tool execution.
+You have a governed tool. Give it to your agent like any other Flue tool. In
+a real agent you bind the caller with `gov.withContext(...)` instead of
+`gov.run(...)`; [Run on Cloudflare Workers](/guides/cloudflare-workers#_3-bind-context-per-invocation-when-flue-dispatches)
+shows how and explains why.
 
 - [Choose authorize vs scope](/guides/authorize-vs-scope): which gate fits
   which tool, and how to combine them.

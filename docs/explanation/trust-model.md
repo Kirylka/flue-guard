@@ -1,97 +1,92 @@
 # The trust model
 
-Security tooling earns trust by being precise about what it does and does not
-guarantee. This page is that statement for flue-guard. Every guarantee here
-is pinned by a test in the repository's suite.
+This page says exactly what flue-guard guarantees and what it does not. Every
+guarantee below has a test in the repository.
 
 ## The one idea
 
-The model controls the arguments. Your application controls the context.
+The model writes the arguments. Your application knows the caller.
 
-Every `accountId`, `amount`, or `query` in a tool call comes from the model,
-which means it can be anything the conversation talked the model into. Treat
-it as a claim. The trusted context (who the caller is, which tenant, which
-scopes) comes from your authenticated request and travels separately, through
-`AsyncLocalStorage` or an explicit `withContext` binding. There is no code
-path by which model output can read or write it.
+Every `accountId`, `amount`, or `query` in a tool call comes from the model.
+The conversation can talk the model into any value, so treat each one as a
+claim, not a fact. The caller's identity, tenant, and scopes come from your
+authenticated request. They travel separately, through `AsyncLocalStorage` or
+an explicit `withContext`. Nothing the model outputs can read or change them.
 
-Every gate is a comparison between those two inputs, and the design keeps you
-on the right side of that comparison. With `scope`, you declare what the call
-touches and the library does the comparing, so you cannot accidentally write
-a check that never involves the caller. With `authorize`, the check is keyed
-to a declared anchor (the caller, or a registered server-side source), so
-"compare an argument against nothing trusted" has no syntax to be written in.
+Every check compares those two things, and the API keeps you from getting the
+comparison backwards. With `scope`, you only say what the call touches, and
+the library does the comparing. So you cannot write a scope check that forgets
+the caller. With `authorize`, every check names what it compares against: the
+caller, or a lookup you registered. So a check that looks only at the
+arguments cannot be written at all.
 
 ## Guaranteed
 
-- Gates run before the handler, every call. There is no code path to
-  `execute` around the pipeline. (The pipeline is a closure over your
-  handler; the host never holds a direct reference.)
-- An ungated side effect cannot be defined without writing
-  `unsafeAllowUnauthorized: true` in your source, where review will see it.
-- A side effect cannot run unrecorded. The intent record is appended
-  before the handler; append failure aborts the call.
-- Every decision is on the chain, including denials, deferrals, replays,
-  and exceptions inside governance steps themselves.
-- Editing recorded history is detectable. Any change to a past entry
-  breaks verification at that entry. With an HMAC key, fabricating a whole
-  chain requires the key.
-- Audit writing is total. Hostile or odd values (`bigint`, circular
-  structures, prototype-polluting keys, throwing getters, 100-deep nesting)
-  are normalized; the receipt is written regardless of what the handler
-  returned.
-- Idempotency never trades a refusal for a duplicate. When completion
-  can't be recorded after a successful side effect, the key stays held and a
-  retry is refused with a conflict.
+- Checks run before your code, on every call. Your handler is only reachable
+  through the checks; the host never gets a direct reference to it.
+- A tool that changes data cannot be defined without a check, unless you write
+  `unsafeAllowUnauthorized: true` in the source, where a reviewer will see it.
+- A change never happens without a record. The first entry is written before
+  your code runs, and if that write fails, your code does not run.
+- Every decision is in the log: refusals, calls waiting for approval, repeats,
+  and errors thrown by the checks themselves.
+- Editing the history is detected. Changing any past entry makes verification
+  fail at that entry. With an HMAC key, building a whole fake log also needs
+  the key.
+- An entry is always written. Odd values such as `bigint`, objects that refer
+  to themselves, dangerous keys like `__proto__`, getters that throw, or deep
+  nesting are converted first.
+- A repeat is refused rather than run twice. If your code succeeded but the
+  result could not be stored, the key stays locked and a retry gets a conflict.
 
 ## Not guaranteed, on purpose
 
-- Your predicates' correctness. `authorize: caller((a, ctx) =>
-  accounts.ownedBy(a.accountId, ctx.actor.id))` is your business logic;
-  flue-guard guarantees it runs before the side effect and that its verdict
-  is recorded, never that it is right.
-- Containment of what `execute` does. Gates run before the handler; they
-  do not sandbox it. A handler that ignores its arguments and deletes
-  something else is outside the model. Sandboxing is Flue's and your
-  substrate's job.
-- Primitive payloads. See below.
-- Exactly-once. At-most-once per key is the guarantee, and it is as
-  strong as the store's atomic claim: process-local for the in-memory
-  default, cross-instance for a store with an atomic `begin`. The
-  completion-failure window surfaces as a refusal, not a duplicate.
-- Availability of the audit file against deletion. The chain proves
-  tampering happened; it cannot resurrect removed data. Ship the JSONL (or
-  use a sink) somewhere append-only if deletion is in your threat model.
-- Multi-writer file safety. `HashChainAuditLog` is single-writer by
-  design; multi-instance deployments use a store-backed sink.
+- **That your checks are right.** In
+  `caller((a, ctx) => accounts.ownedBy(a.accountId, ctx.actor.id))`, the
+  ownership logic is yours. flue-guard guarantees it runs before the change
+  and that its answer is logged. It cannot know whether the answer is correct.
+- **What your code does once it runs.** Checks run before the handler. They
+  do not limit what it does next. A handler that ignores its arguments and
+  deletes something else is outside what this library can see. Limiting that
+  is the job of Flue's sandbox and your infrastructure.
+- **Tools that take free-form text.** See below.
+- **Exactly once.** The guarantee is *at most* once per key. It is only as
+  strong as the store: one process for the default in-memory store, all
+  instances for a store that claims keys atomically. The one gap, a stored
+  result that failed to save, ends in a refusal, never a second run.
+- **Protection against deleting the log.** The chain shows that something was
+  changed. It cannot bring deleted entries back. If deletion is a risk for
+  you, copy the log somewhere that only allows appending.
+- **Several writers on one file.** `HashChainAuditLog` expects one writer.
+  With several instances, use a store-backed log.
 
-## Primitives are attested, not enforced
+## Free-form tools are declared, not checked
 
-A tool whose argument is free-form (raw SQL, shell, arbitrary HTTP, a code
-interpreter) has no target an in-process check can bind: the payload *is* the
-blast radius. flue-guard's honest options are limited, and it takes both:
+Some tools take raw SQL, a shell command, an arbitrary HTTP request, or code
+to run. There is no target in them to check. The text itself decides what
+happens. So flue-guard does two things, and only two:
 
-- It **refuses to certify** such a tool as governed. A side-effecting
-  `kind: "primitive"` will not define until you set `egressControlled: true`,
-  which is your written attestation that containment exists out-of-band (an
-  egress allowlist, no credential in the sandbox, database-level controls).
-- It **flags every call as broad** in the audit (`kind: "primitive"` on the
-  entry), so a reviewer reading the log sees which entries a scope check did
-  not actually constrain.
+- It **does not treat such a tool as safe** on its own. A tool marked
+  `kind: "primitive"` that changes data will not load until you also set
+  `egressControlled: true`. That flag is your written statement that
+  something else limits what the tool can reach: a network allowlist, no
+  credentials in the sandbox, a read-only database user.
+- It **marks every call as broad** in the log (`kind: "primitive"` on the
+  entry). A reviewer can see which entries no scope check actually limited.
 
-The flag is not verified, because it cannot be: the library has no way to
-inspect your egress rules. Enforcement belongs to the substrate; refusing to
-pretend otherwise is the feature.
+The library does not check the flag, because it cannot see your network rules.
+Limiting these tools is your infrastructure's job. Saying so plainly is the
+point.
 
-## Residual risks worth knowing
+## Risks that remain
 
-- In-conversation deception. Governance bounds what a tool call can do;
-  it does not stop the model from *saying* something wrong, or from being
-  socially engineered within the caller's own legitimate authority (a user
-  can still be talked into asking for a refund they're entitled to).
-- Scope pattern breadth. `ticket:*` in a context grants every ticket. The
-  patterns you bind are policy; audit entries record the requested scopes so
-  over-broad grants are at least visible.
-- Key custody. The HMAC key and the audit sink's credentials define who
-  could forge or truncate history. Keep them out of the environment the
-  agent's handlers run in.
+- **The model can still say wrong things.** The checks limit what a tool call
+  can do. They do not stop the model from saying something false. They also do
+  not stop a user from being talked into a request they are allowed to make,
+  such as a refund they are entitled to.
+- **Wide scope patterns.** `ticket:*` gives access to every ticket. The
+  patterns you bind are your policy. The log records the scopes each call
+  asked for, so a grant that is too wide is at least visible.
+- **Who holds the keys.** Whoever has the HMAC key, or write access to the
+  log's storage, could fake or cut the history. Keep both away from the
+  machine where the agent's tools run.

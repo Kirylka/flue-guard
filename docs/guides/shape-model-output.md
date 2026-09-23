@@ -1,17 +1,17 @@
 # Shape what the model sees
 
-A tool's return value lands in the model's context window and steers the rest
-of the run. Two separate seams control what leaves the tool, and they answer
+Whatever a tool returns goes into the model's context and affects the rest of
+the run. Two separate options control what leaves the tool. They answer
 different questions:
 
-| Seam | Question | Affects |
+| Option | Question | Affects |
 | --- | --- | --- |
 | `toModelOutput` | "What should the *model* see of this result?" | The value returned to Flue/the model. The audit log still records the full result. |
 | `redact` | "What may be *written to the audit log*?" | The audit entry only. The handler and the model are untouched. |
 
-Using one for the other's job is the classic mistake: `toModelOutput` does
-**not** keep a secret out of the audit trail, and `redact` does **not** keep
-tokens out of the model's context.
+The common mistake is to use one for the other's job. `toModelOutput` does
+**not** keep a secret out of the log. `redact` does **not** keep it away from
+the model.
 
 Every example below uses this toolkit:
 
@@ -24,8 +24,7 @@ const gov = govern({ audit: "audit.jsonl" });
 
 ## Trim the model's view with `toModelOutput`
 
-Context hygiene: return rich data for your records, hand the model only what
-it needs.
+Return the full data for your records, and give the model only what it needs.
 
 ```ts
 export const lookupCustomer = gov.tool({
@@ -43,19 +42,18 @@ export const lookupCustomer = gov.tool({
 });
 ```
 
-The audit entry records the **full** result (after redaction); the model gets
-`{ id, plan }`. On an idempotent replay, the *stored* full result is routed
-through `toModelOutput` again, so a replayed call returns exactly what the
-original did. Note the stored value is JSON-normalized, so don't rely on
-`Date`s or class instances surviving the store.
+The log records the **full** result, masked as usual. The model gets
+`{ id, plan }`. When a retry returns a stored result, that stored result goes
+through `toModelOutput` again, so the retry returns exactly what the first
+call did. The stored copy is plain JSON, so `Date`s and class instances do not
+survive it.
 
 ## Keep results JSON-plain
 
-Flue serializes what the model sees (the handler's return, or
-`toModelOutput`'s) and **rejects** `bigint`, `Date`, class instances, and
-circular structures (`@flue/runtime` 2.x behavior). Return plain objects,
-arrays, strings, finite numbers, booleans, and `null`. Convert at the edge of
-your handler:
+Flue converts what the model sees to JSON, and **rejects** `bigint`, `Date`,
+class instances, and objects that refer to themselves. Return plain objects,
+arrays, strings, numbers, booleans, and `null`. Convert at the end of your
+handler:
 
 ```ts
 declare const orders: {
@@ -77,15 +75,15 @@ export const lookupOrder = gov.tool({
 });
 ```
 
-(The audit log is more forgiving than Flue: it normalizes `bigint`, circular
-and deep values itself so the *receipt* never breaks. The rejection above is
-about what Flue will serialize for the model.)
+The audit log is more forgiving than Flue. It converts those values itself, so
+an entry is always written. The rejection above is about what Flue sends to
+the model.
 
 ## Keep secrets out of the audit with `redact`
 
-The default redactor already masks common sensitive field names and PII-like
-strings. Override per tool when a tool handles something the defaults don't
-know about:
+The default masking already covers common sensitive field names, emails, and
+long runs of digits. When a tool handles something the defaults do not know about,
+add fields for that tool:
 
 ```ts
 import { composeRedactors, defaultRedactor, redactFields } from "flue-guard/adapters";
@@ -102,9 +100,9 @@ export const rotateCredential = gov.tool({
 });
 ```
 
-Remember the two on-purpose exceptions: **idempotency keys** and **requested
-scopes** are recorded unredacted for correlation, so never build them from
-secrets ([details](/guides/protect-the-audit-log#know-what-is-and-isnt-redacted)).
+Two values are never masked, on purpose: **idempotency keys** and **requested
+scopes**. Never build them from secrets
+([why](/guides/protect-the-audit-log#know-what-is-and-isn-t-redacted)).
 
 ## Related
 

@@ -7,22 +7,20 @@ without breaking into anything. They asked.
 
 Meta ran an AI support agent, High Touch Support, that helped locked-out
 users regain access. One of its tools could trigger a password reset. The
-tool worked. What it never did was check that the person asking owned the
-account they were asking about. Point it at someone else's account, receive a
-reset link, walk in. The campaign ran for about seven weeks before detection,
-and the victims included a White House handle and a senior US Space Force
-account.
+tool worked. It never checked that the person asking owned the account they
+asked about. Name someone else's account, get the reset link, take over the
+account. The attacks ran for about seven weeks before anyone noticed. The
+victims included a White House account and a senior US Space Force account.
 
 (Reporting: [BleepingComputer](https://www.bleepingcomputer.com/news/security/meta-ai-support-data-breach-affects-20-000-instagram-accounts/),
 [TechCrunch](https://techcrunch.com/2026/06/01/hackers-hijacked-instagram-accounts-by-tricking-meta-ai-support-chatbot-into-granting-access/),
 [SecurityWeek](https://www.securityweek.com/meta-says-20000-instagram-accounts-hacked-via-ai-tool-abuse/).)
 
-The model was not jailbroken and no clever prompt injection was involved.
-The agent did a normal thing it was allowed to do. The check "is the caller
-allowed to touch this account?" lived nowhere: prompts can't enforce it, and
-nothing at the tool boundary asked it. flue-guard exists to give that check a
-place to live, to refuse tools that don't have one, and to keep a receipt
-either way.
+Nobody broke the model, and no clever prompt injection was needed. The agent
+did a normal thing it was allowed to do. The question "may this caller touch
+this account?" was asked nowhere. A prompt cannot enforce it, and the tool
+never asked it. flue-guard gives that check a fixed place. It refuses tools
+that have no check, and it records every call either way.
 
 ## Flue already says this
 
@@ -34,31 +32,27 @@ principle:
 > repository, or credential a tool can use, then let the model select only
 > values within that boundary.
 
-Flue's documented technique is to close over trusted identifiers (the agent
-instance `id` your authenticated route selected) so the model can't choose
-them. That works, and flue-guard builds on the same idea with three additions
-that closures alone don't give you:
+Flue's own advice is to capture trusted ids in a closure, such as the agent
+`id` your authenticated route picked, so the model cannot choose them. That
+works. flue-guard builds on the same idea and adds three things a closure
+alone does not give you:
 
-1. The gate is declared, and required. A `sideEffect: true` tool without
-   an authorization gate refuses to define. The High Touch Support failure
-   mode, a dangerous tool whose check lives nowhere, becomes a startup error
-   instead of an incident.
-2. The decision is recorded. Every call, allowed or refused, lands in a
-   hash-chained audit log you can hand to security or finance and verify
-   after the fact.
-3. Doing it twice is its own failure. Agents retry and re-plan; a
-   declared idempotency key makes the side effect run at most once per
-   logical operation.
+1. The check is declared, and required. A `sideEffect: true` tool with no
+   check will not load. The High Touch Support mistake, a dangerous tool with
+   no check anywhere, becomes an error at startup instead of an incident.
+2. The decision is recorded. Every call, allowed or refused, goes into a log
+   you can give to security or finance, and they can verify it later.
+3. Doing something twice is its own failure. Agents retry and change plans.
+   An idempotency key makes the side effect run at most once per operation.
 
 ## Division of labor
 
-Flue decides what the agent can do: which tools exist in the session, what
-the sandbox allows, how the turn runs. flue-guard decides, per call, whether
-*this caller* may do *this action* to *this resource*, whether it is safe to
-do again, and whether you can prove what happened. The identity itself comes
-from above both: whatever authenticates your users (your IdP, your session
-layer) is the source of the `TrustedContext` you bind at the request
-boundary.
+Flue decides what the agent can do: which tools exist, what the sandbox
+allows, how a turn runs. flue-guard decides on each call whether *this caller*
+may do *this action* to *this record*. It also decides whether the call may run
+again, and it keeps the proof. Neither of them knows who the user is. That
+comes from your login system, and your request handler turns it into the
+`TrustedContext` it binds.
 
 Top to bottom, each layer feeds the one below it:
 
@@ -70,17 +64,15 @@ Top to bottom, each layer feeds the one below it:
 | Flue | Harness, sessions, sandbox, model wiring |
 | Your substrate | Egress allowlists, credentials, isolation |
 
-The model sits beside this stack, not in it: it supplies arguments and
-nothing else. What each layer is trusted to do, and the attacks each one
+The model is not a layer in this list. It supplies arguments and nothing else. What each layer is trusted to do, and the attacks each one
 does and doesn't stop, is spelled out in
 [the trust model](/explanation/trust-model).
 
 ## Why in-process, per tool
 
-Authorization for a tool call needs the call's arguments, the caller's
-identity, and your domain's ownership data, all at the moment of the call.
-A gateway in front of the agent sees prompts, not tool targets; harness state
-knows modes, not record ownership. The only place all three meet is the tool
-boundary itself, so that is where flue-guard runs: as a wrapper around the
-handler, inside your process, with no network hop and no extra
-infrastructure to deploy.
+To decide on a tool call you need three things at the moment of the call: the
+arguments, who the caller is, and who owns what in your data. A gateway in
+front of the agent sees prompts, not tool arguments. The agent framework knows
+which tools are on, not who owns a record. Only the tool call itself has all
+three. So flue-guard wraps your handler, inside your process. There is no extra
+network call and no extra service to run.

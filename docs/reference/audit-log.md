@@ -52,11 +52,17 @@ const hash: string = await hashEntry(body);            // SHA-256
 const mac: string = await hashEntry(body, "chain-key"); // HMAC-SHA256
 ```
 
-Canonicalizes the body (recursively key-sorted, JSON-safe: `bigint` becomes a
-decimal string, circular structures become `[Circular]`, non-finite numbers
-become `null`, depth capped) and hashes it with Web Crypto, so the same body
-produces the same hash on Node, Workers, Deno, Bun, and Lambda. An empty
-string `hmacKey` throws `GovernanceConfigError`.
+First the body is put in a fixed form:
+
+- keys are sorted at every level;
+- `bigint` becomes a string;
+- an object that refers to itself becomes `[Circular]`;
+- `NaN` and `Infinity` become `null`;
+- nesting is cut at a maximum depth.
+
+Then it is hashed with Web Crypto, so the same body gives the same hash on
+Node, Workers, Deno, Bun, and Lambda. An empty `hmacKey` throws
+`GovernanceConfigError`.
 
 ## `verifyChain`
 

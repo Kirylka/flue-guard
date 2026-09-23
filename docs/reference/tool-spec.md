@@ -45,9 +45,9 @@ The model-facing tool name and description, passed through to Flue unchanged.
 
 The argument schema. Accepted forms, in order of preference:
 
-1. **A Valibot object schema.** Forwarded to Flue as the tool's `input`, so
-   Flue parses the model's arguments against it before the pipeline runs and
-   the model sees the real parameter shape. Strongly recommended.
+1. **A Valibot object schema.** Passed to Flue as the tool's `input`. Flue
+   checks the model's arguments against it before any step here runs, and the
+   model sees the real shape of the parameters. Strongly recommended.
 2. **Any other Standard Schema** (Zod 3.24+, ArkType, TypeBox 0.34+), a
    zod-like `{ parse }` object, or a plain `(input) => T` function. The
    library validates arguments internally, but Flue's `input` degrades to an
@@ -123,10 +123,10 @@ type AuthorizeSpec<TArgs> =
 A `false` result throws `AuthorizationDeniedError`. A spec that names an
 unregistered trusted source fails at definition time.
 
-Note on typing: inside a `gov.tool` literal, TypeScript resolves the
-`caller(...)` call before it infers from `parameters`, so annotate the
-argument type (`caller((a: { accountId: string }, ctx) => …)`) or use the
-plain object form, which infers fully.
+Typing: inside `gov.tool({ ... })`, TypeScript reads `caller(...)` before
+`parameters`, so it cannot work out the type of `a`. Write it out,
+`caller((a: { accountId: string }, ctx) => …)`, or use the object form, which
+infers it.
 
 ## `guard`
 
@@ -160,11 +160,11 @@ type ApprovalPolicy<TArgs> =
   | ((args: TArgs, ctx: TrustedContext) => boolean | string | undefined);
 ```
 
-`true` (or `always(reason?)`) requires approval on every call; a predicate
-requires it when it returns `true` or a reason string; `false` (or `never()`)
-does not itself require approval, and does not count as a gate. A guard review
-still requires approval. Requires an `ApprovalAdapter` on
-the toolkit or the call is denied. See
+`true` or `always(reason?)` requires approval on every call. A function
+requires it when it returns `true` or a reason string. `false` or `never()`
+requires no approval and does not count as a check. A guard that asks for
+review also requires approval. Without an `ApprovalAdapter` on the toolkit,
+any call that needs approval is refused. See
 [Require human approval](/guides/require-approval).
 
 ## `canApprove`
@@ -198,19 +198,19 @@ result through this function again. See
 
 ## `kind`
 
-How the arguments relate to the tool's blast radius. `"scoped"` (default)
-means structured arguments with a real target, fully governable in-process.
-`"primitive"` means a free-form payload (raw SQL, shell, arbitrary HTTP) that
-argument checks cannot bind; primitives are flagged `kind: "primitive"` on
-their audit entries.
+What kind of arguments the tool takes. `"scoped"` (default) means structured
+arguments with a real target, such as an account id, that checks can compare.
+`"primitive"` means free-form text such as raw SQL, a shell command, or an
+arbitrary HTTP request, which has no target to check. Their log entries carry
+`kind: "primitive"`.
 
 ## `egressControlled`
 
-For a side-effecting primitive: your attestation that its blast radius is
-bounded outside the process (egress allowlist, no in-sandbox credential,
-database-level controls). The library does not and cannot verify this; the
-flag only permits the definition. See
-[the trust model](/explanation/trust-model#primitives-are-attested-not-enforced).
+Required on a primitive with `sideEffect: true`. It is your statement that
+something outside this library limits what the tool can reach. Examples: a
+network allowlist, no credentials in the sandbox, database permissions. The
+library cannot check this. The flag only lets the tool load. See
+[the trust model](/explanation/trust-model#free-form-tools-are-declared-not-checked).
 
 ## `unsafeAllowUnauthorized`
 
