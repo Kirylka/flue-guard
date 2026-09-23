@@ -17,18 +17,19 @@ hero:
       link: https://github.com/Kirylka/flue-guard
 
 features:
-  - icon: 🚫
+  # Icons: Lucide (ISC license), inlined so they follow the theme color.
+  - icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--vp-c-brand-1)"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>'
     title: Refuses by default
-    details: A tool that changes data will not even load without a check. Every call compares the model's arguments with the real caller before your code runs.
-  - icon: 🔁
+    details: A tool that changes data will not load without a check. Every call is checked against the real caller.
+  - icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--vp-c-brand-1)"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/><path d="M11 10h1v4"/></svg>'
     title: Safe retries
-    details: Give a tool an idempotency key, and a retried call returns the first result instead of refunding, emailing, or resetting a second time.
-  - icon: 🧾
+    details: Give a tool an idempotency key, and a retried call returns the first result. Nothing is refunded twice.
+  - icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--vp-c-brand-1)"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>'
     title: A log you can verify
-    details: Every decision is written to a log where each line holds the hash of the one before. Edit any past line and verifyChain() names it. With an HMAC key, rewriting the whole file fails too.
-  - icon: 🧩
+    details: Each entry holds the hash of the one before. Edit a past line, and <code>verifyChain()</code> points to it.
+  - icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--vp-c-brand-1)"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg>'
     title: Built for Flue
-    details: gov.tool() returns a real Flue ToolDefinition. The same decisions and the same hashes on every runtime Flue supports.
+    details: <code>gov.tool()</code> returns a real Flue tool. Same decisions and hashes on every runtime Flue runs on.
 ---
 
 ## In thirty seconds
