@@ -72,7 +72,7 @@ its key, its handler.
 
 Everything specific to Flue lives in one small module. `toFlueTool` turns a
 governed tool into Flue's `ToolDefinition` (`input` and
-`run({ data, signal })`, tested against `@flue/runtime` 2.0.8), and `govern()`
+`run({ data, signal })`, tested against `@flue/runtime` 2.0.8 and 2.3), and `govern()`
 passes Flue's `defineTool` in for you. The rest of the library never imports
 Flue. That is why its checks can be tested without Flue, and why
 `createGovernedToolkit` accepts your own `defineTool` if you need one.

@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { TypeSafeClient, type Fetch } from "@typesafe-ai/sdk";
+import { jsonBody } from "./_body.js";
 import { createJevGuard, type JevGuardOptions } from "../src/jev.js";
 import { createGovernedToolkit } from "../src/toolkit.js";
 import { InMemoryAuditLog } from "../src/audit.js";
@@ -41,7 +42,7 @@ for (const [probability, decision, reasons] of [
 test("Jev sends only projected state and the policy question", async () => {
   let payload: Record<string, unknown> | undefined;
   const guard = createJevGuard(options(async (_url, init) => {
-    payload = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    payload = jsonBody(init);
     return response();
   }));
   await guard.evaluate({ tool: "reply", args: { text: "Hello" }, ctx: { ...context, authorizedScopes: [], attributes: { secret: "do-not-send" } } });
@@ -168,7 +169,7 @@ test("threshold configuration remains stable when caller mutates its configurati
 test("the policy alone is required: state defaults to the tool and its arguments", async () => {
   let payload: Record<string, unknown> | undefined;
   const config = options(async (_url, init) => {
-    payload = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    payload = jsonBody(init);
     return response();
   });
   delete (config as { state?: unknown }).state;
