@@ -4,6 +4,24 @@ The object you pass to `gov.tool(...)` or `defineGovernedTool(...)`. With
 `gov.tool`, `parameters` must be a Standard Schema and `TArgs` below is
 inferred from it; with `defineGovernedTool<TArgs>`, you state it.
 
+## Which check do I need?
+
+A tool with `sideEffect: true` will not load without at least one check from
+the first four rows. Most tools need one or two of them.
+
+| You need to know | Use | Counts as the required check |
+| --- | --- | --- |
+| May this caller act on this record? (ownership, a lookup) | [`authorize`](#authorize) | Yes |
+| Is the target inside the caller's grants, known up front? (tenant, customer list) | [`scope`](#scope) | Yes |
+| May this kind of user call the tool at all? | [`requireRoles`](#requireroles) | Yes |
+| Must a person sign off on this call? | [`approval`](#approval), plus [`canApprove`](#canapprove) for who may sign | Yes, when it can ask |
+| Does the call itself break a written policy? (content, intent) | [`guard`](#guard) | No, it adds to a check |
+| Is the payload free-form (SQL, shell, any URL)? | [`kind: "primitive"`](#kind) with [`egressControlled`](#egresscontrolled) | Replaces the check; you limit access outside the library |
+| Will the model retry it? | [`idempotency`](#idempotency) | No, it makes retries safe |
+
+[`unsafeAllowUnauthorized`](#unsafeallowunauthorized) turns the rule off.
+[Authorize vs scope](/guides/authorize-vs-scope) explains the first two rows.
+
 ```ts
 import type {
   ApprovalPolicy,

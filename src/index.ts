@@ -25,6 +25,7 @@ export type {
   GovernedToolSpec,
   GovernedFlueToolSpec,
   AuthorizeSpec,
+  CallerCheck,
   TrustedSource,
   FlueDefineTool,
   SignalDelivery,
