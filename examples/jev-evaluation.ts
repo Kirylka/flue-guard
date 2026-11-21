@@ -49,8 +49,8 @@ export async function runJevEvaluation(options: EvaluationOptions) {
       const audit = new InMemoryAuditLog();
       const client: Pick<TypeSafeClient, "systemOne"> = {
         systemOne: (request, requestOptions) => options.client.systemOne(request, requestOptions).map((result) => {
-          inputTokens = result.usage.input_tokens;
-          outputTokens = result.usage.output_tokens;
+          inputTokens = result.usage.input_tokens ?? 0;
+          outputTokens = result.usage.output_tokens ?? 0;
           return result;
         }),
       };

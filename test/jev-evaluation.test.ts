@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { TypeSafeClient } from "@typesafe-ai/sdk";
+import { jsonBody } from "./_body.js";
 import { runJevEvaluation } from "../examples/jev-evaluation.js";
 
 const cases = [
@@ -40,7 +41,7 @@ test("evaluation rejects invalid budgets before making requests", async () => {
 test("draft operation and draft text are separate in provider state, without evaluation labels", async () => {
   let state: unknown;
   const client = new TypeSafeClient({ apiKey: "synthetic", logLevel: "off", fetch: async (_url, init) => {
-    state = (JSON.parse(String(init?.body)) as { state: unknown }).state;
+    state = jsonBody<{ state: unknown }>(init).state;
     return Response.json({ model: "test", usage: { input_tokens: 1, output_tokens: 1 }, answers: {
       policyViolation: { type: "noul", noul: 0 },
     } });

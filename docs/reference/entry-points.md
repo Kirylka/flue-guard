@@ -11,7 +11,7 @@ adapter *interfaces*; implementations live on subpaths so they don't crowd it.
 | `flue-guard` | `govern`, `createGovernedToolkit`, `caller`, `trusted`, `always`, `never`, `ContextStore`, the error taxonomy, core types, adapter interfaces |
 | `flue-guard/audit` | `HashChainAuditLog`, `InMemoryAuditLog`, `hashEntry`, `verifyChain`, `GENESIS_HASH` |
 | `flue-guard/adapters` | Built-in adapter implementations and helpers: `defaultRbac`, `autoApprove`, redactors, `InMemoryIdempotencyStore`, scope matchers, `toFlueTool`, `hostContextResolver` |
-| `flue-guard/jev` | Optional `createJevGuard`, `JevGuardOptions`, `JevHazard`, `JevThreshold`; requires optional peer `@typesafe-ai/sdk ^0.6.0`. [Guide](/guides/jev-guard) |
+| `flue-guard/jev` | Optional `createJevGuard`, `JevGuardOptions`, `JevHazard`, `JevThreshold`; requires optional peer `@typesafe-ai/sdk` 0.6 or 0.7. [Guide](/guides/jev-guard) |
 | `flue-guard/testing` | `InMemoryAuditLog`, `InMemoryIdempotencyStore` (re-exported test doubles) |
 
 ## `flue-guard` (root)

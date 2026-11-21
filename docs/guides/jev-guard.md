@@ -9,7 +9,7 @@ the same: does this call break the policy?
 The adapter is experimental, so option names may still change.
 
 ```sh
-npm install @typesafe-ai/sdk@^0.6.0
+npm install @typesafe-ai/sdk@^0.7.0
 ```
 
 The example below governs one ticket-reply tool, set up as usual:
