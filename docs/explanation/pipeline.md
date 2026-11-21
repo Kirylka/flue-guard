@@ -10,8 +10,8 @@ context -> validate -> roles -> scope -> authorize -> guard -> approval
 
 ## The steps
 
-1. **Context.** Find out who is calling: from `run(...)`, or from the value
-   given to `withContext(...)`. No caller means no call
+1. **Context.** Find out who is calling: from `run(...)`, the value given to
+   `withContext(...)`, or the signal given to `withSignal(...)`. No caller means no call
    (`MissingContextError`), and that refusal is logged too.
 2. **Validate.** Check the arguments the model wrote. Flue has already checked
    a Valibot `parameters` schema. Other validators run here. Invalid arguments

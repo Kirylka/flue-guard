@@ -3,12 +3,13 @@
 flue-guard is ESM-only, requires Node >= 22.19, and declares peer
 dependencies `@flue/runtime ^2.0.8` and `valibot ^1.0.0`.
 
-Five import paths. The root carries the golden path, the types, and the
-adapter *interfaces*; implementations live on subpaths so they don't crowd it.
+Five import paths. The root has what most apps need: `govern`, the types, and
+the adapter *interfaces*. Implementations live on subpaths so the root stays
+small.
 
 | Import | Contents |
 | --- | --- |
-| `flue-guard` | `govern`, `createGovernedToolkit`, `caller`, `trusted`, `always`, `never`, `ContextStore`, the error taxonomy, core types, adapter interfaces |
+| `flue-guard` | `govern`, `createGovernedToolkit`, `caller`, `trusted`, `always`, `never`, `ContextStore`, the errors, core types, adapter interfaces |
 | `flue-guard/audit` | `HashChainAuditLog`, `InMemoryAuditLog`, `hashEntry`, `verifyChain`, `GENESIS_HASH` |
 | `flue-guard/adapters` | Built-in adapter implementations and helpers: `defaultRbac`, `autoApprove`, redactors, `InMemoryIdempotencyStore`, scope matchers, `toFlueTool`, `hostContextResolver` |
 | `flue-guard/jev` | Optional `createJevGuard`, `JevGuardOptions`, `JevHazard`, `JevThreshold`; requires optional peer `@typesafe-ai/sdk` 0.6 or 0.7. [Guide](/guides/jev-guard) |
@@ -22,9 +23,9 @@ adapter *interfaces*; implementations live on subpaths so they don't crowd it.
 | --- | --- |
 | `govern(options)` | Create a toolkit with Flue's `defineTool` wired in; the way in. [Reference](/reference/toolkit#govern) |
 | `createGovernedToolkit(options)` | The explicit form: same toolkit, you inject `defineTool`. [Reference](/reference/toolkit#creategovernedtoolkit) |
-| `caller(check)` | Authorization anchored to the authenticated caller. [Reference](/reference/tool-spec#authorize) |
+| `caller(check)` | Authorization anchored to the authenticated caller; same as passing `check` itself. [Reference](/reference/tool-spec#authorize) |
 | `trusted(source, check)` | Authorization anchored to a registered trusted source. [Reference](/reference/tool-spec#authorize) |
-| `always(reason?)` / `never()` | Approval policy sugar. [Reference](/reference/tool-spec#approval) |
+| `always(reason?)` / `never()` | Shortcuts for "always ask" and "never ask" approval policies. [Reference](/reference/tool-spec#approval) |
 | `ContextStore` | `AsyncLocalStorage`-backed trusted-context holder. [Reference](/reference/toolkit#contextstore) |
 | Error classes & guards | `GovernanceError` and subclasses, `isGovernanceError`, `isGovernanceDenial`, `isApprovalPending`. [Reference](/reference/errors) |
 
@@ -36,12 +37,15 @@ adapter *interfaces*; implementations live on subpaths so they don't crowd it.
 | `GovernedToolkit` | The toolkit: `tool`, `defineGovernedTool`, `withContext`, `withSignal`, `run`, `current`, `peek` |
 | `GovernedToolSpec`, `GovernedFlueToolSpec` | The tool spec (explicit-generic and schema-inferred forms) |
 | `ToolGuard`, `GuardRequest`, `GuardAssessment` | Provider-neutral semantic guard interfaces |
-| `AuthorizeSpec`, `TrustedSource` | Authorization gate shapes |
+| `AuthorizeSpec`, `CallerCheck`, `TrustedSource` | Authorization gate shapes |
+| `SignalDelivery` | The part of Flue's `useDelivery()` result that `withSignal` reads |
+| `PendingApprovalOutput` | What the model sees when a call waits for approval under Flue |
+| `ToolCallInfo` | The host's call id, passed to a governed tool's `execute` |
 | `TrustedContext`, `ExecutionContext` | The context your app binds / the one handlers receive |
 | `ContextResolver` | `(hostContext?) => TrustedContext \| Promise<TrustedContext>` |
 | `Decision`, `Outcome` | Audit vocabulary: `allow\|deny\|defer`, `executing\|success\|error\|denied\|replayed\|pending` |
 | `ArgValidator`, `ParseValidator`, `FnValidator`, `StandardSchemaV1`, `InferArgs` | Parameter-schema typing |
-| `FlueCompatibleTool`, `FlueToolDefinition`, `FlueDefineTool` | The governed intermediate and Flue-facing shapes |
+| `FlueCompatibleTool`, `FlueToolDefinition`, `FlueDefineTool` | The governed tool before and after it becomes a Flue tool |
 | `GovernanceErrorCode` | Union of every machine-readable error code |
 | Adapter interfaces | `AuditLog`, `AuditEntry`, `AuditEntryBody`, `AuditInput`, `IdempotencyStore`, `IdempotencyRecord`, `IdempotencyStatus`, `BeginResult`, `RbacAdapter`, `RbacRequest`, `ApprovalAdapter`, `ApprovalPolicy`, `ApprovalRequest`, `ApprovalDecision`, `Redactor`. [Reference](/reference/adapters) |
 
