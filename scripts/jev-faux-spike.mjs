@@ -79,16 +79,17 @@ function SupportAgent() {
 
 const runtime = await start({ agents: [SupportAgent], providers: [faux.provider], env: {} });
 try {
-  async function call(instanceId, actorId, accountId, expectedError) {
+  async function call(instanceId, actorId, accountId, expectedError, { endsTurn = false } = {}) {
     faux.setResponses([
       fauxAssistantMessage([fauxToolCall("reset_password", { accountId })], { stopReason: "toolUse" }),
-      (context) => {
+      // A pending approval ends the turn, so the model is not asked again.
+      ...(endsTurn ? [] : [(context) => {
         const result = context.messages.findLast((message) => message.role === "toolResult");
         assert.ok(result, "Flue must return a tool result to the model");
         assert.equal(result.isError, expectedError);
         modelResult = result.content.filter((part) => part.type === "text").map((part) => part.text).join("");
         return fauxAssistantMessage("Turn complete.");
-      },
+      }]),
     ]);
     const handle = init(SupportAgent, { id: instanceId });
     const receipt = await handle.dispatch({
@@ -100,8 +101,9 @@ try {
       },
     });
     const reply = await handle.read(receipt, { signal: globalThis.AbortSignal.timeout(10000) });
-    assert.equal(reply.text, "Turn complete.");
+    if (!endsTurn) assert.equal(reply.text, "Turn complete.");
     assert.equal(faux.getPendingResponseCount(), 0);
+    return reply;
   }
 
   probability = 0.95;
@@ -111,10 +113,12 @@ try {
   assert.equal((await audit.entries()).at(-1).error, "guard_denied");
 
   probability = 0.5;
-  await call("guarded", "user-7", "user-7", true);
+  await call("guarded", "user-7", "user-7", false, { endsTurn: true });
   assert.equal(resets, 0);
   assert.equal(approvals, 1);
-  assert.equal((await audit.entries()).at(-1).outcome, "pending");
+  const pending = (await audit.entries()).at(-1);
+  assert.equal(pending.outcome, "pending");
+  assert.equal(typeof pending.toolCallId, "string", "Flue's toolCallId is on the audit entry");
 
   approved = true;
   await call("guarded", "user-7", "user-7", false);

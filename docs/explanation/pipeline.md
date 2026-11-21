@@ -26,7 +26,7 @@ context -> validate -> roles -> scope -> authorize -> guard -> approval
    refuses it, or asks for review. If it fails or times out, the call stops.
 7. **Approval.** If the policy asks for it, or the guard asked for review, the
    adapter answers approved, denied, or pending. Pending stops the call before
-   anything has run.
+   anything has run; under Flue it also ends the agent's turn.
 8. **Idempotency.** The key is claimed atomically. If the same key finished
    within the TTL, the stored result is returned. If it is still running, the
    call is refused.

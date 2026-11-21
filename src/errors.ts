@@ -127,6 +127,8 @@ export class GovernanceConfigError extends GovernanceError {
  */
 export class ApprovalPendingError extends GovernanceError {
   readonly ref?: string;
+  /** Why approval is needed: the adapter's reason, else the policy's. */
+  readonly reason?: string;
 
   constructor(tool: string, ref?: string, reason?: string) {
     super(
@@ -136,6 +138,7 @@ export class ApprovalPendingError extends GovernanceError {
       tool,
     );
     this.ref = ref;
+    this.reason = reason;
   }
 }
 

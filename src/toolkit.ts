@@ -26,6 +26,7 @@ import type {
   InferArgs,
   ParseValidator,
   StandardSchemaV1,
+  ToolCallInfo,
   TrustedContext,
 } from "./types.js";
 import { ContextStore, type ContextResolver } from "./context.js";
@@ -154,7 +155,12 @@ export interface GovernedToolSpec<TArgs, TResult> {
    * must not embed secrets — unlike args/results, it is not redacted.
    */
   idempotency?: {
-    key: (args: TArgs, ctx: TrustedContext) => string;
+    /**
+     * `ctx.toolCallId` is the host's id for this call, when it gives one (Flue
+     * does). It only dedupes re-runs of the same call: a call the model makes
+     * again, including the one after an approval, gets a new id.
+     */
+    key: (args: TArgs, ctx: TrustedContext & { toolCallId?: string }) => string;
     ttlMs?: number;
   };
   /** Approval policy. */
@@ -210,6 +216,13 @@ export interface GovernedToolSpec<TArgs, TResult> {
    * unless you say so explicitly.
    */
   unsafeAllowUnauthorized?: boolean;
+  /**
+   * Bound on one call, in milliseconds, forwarded to Flue's tool `timeoutMs`.
+   * Flue 2.3+ aborts `ctx.signal` when it expires and tells the model the call
+   * timed out; older Flue versions ignore it. The governance checks count
+   * against it too.
+   */
+  timeoutMs?: number;
   /** The real handler. Receives validated args and the execution context. */
   execute: (args: TArgs, ctx: ExecutionContext) => Promise<TResult> | TResult;
 }
@@ -523,6 +536,15 @@ export function createGovernedToolkit(
       }
     }
 
+    if (
+      spec.timeoutMs !== undefined &&
+      !(Number.isInteger(spec.timeoutMs) && spec.timeoutMs > 0)
+    ) {
+      throw new GovernanceConfigError(
+        spec.name,
+        `timeoutMs for "${spec.name}" must be a positive whole number of milliseconds.`,
+      );
+    }
     if (spec.guard) {
       guardTimeout(spec.guard.timeoutMs, spec.name);
       if (typeof spec.guard.evaluate !== "function") {
@@ -547,7 +569,9 @@ export function createGovernedToolkit(
       rawArgs: unknown,
       hostContext?: unknown,
       signal?: AbortSignal,
+      call?: ToolCallInfo,
     ): Promise<unknown> => {
+      const toolCallId = call?.toolCallId || undefined;
       let assessment: GuardAssessment | undefined;
       const audit = (input: AuditInput) => appendAudit({
         ...input,
@@ -562,6 +586,7 @@ export function createGovernedToolkit(
           actorId: "unknown",
           tenantId: "unknown",
           tool: spec.name,
+          ...(toolCallId ? { toolCallId } : {}),
           decision: "deny",
           outcome: "denied",
           requestedScopes: [],
@@ -578,6 +603,8 @@ export function createGovernedToolkit(
         tenantId: ctx.tenantId,
         tool: spec.name,
         requestId: ctx.requestId,
+        // Omitted when the host gives no call id, so entries stay unchanged.
+        ...(toolCallId ? { toolCallId } : {}),
         // Flag broad tools in the audit; omit for the common scoped case so
         // existing entries are unchanged.
         ...(spec.kind === "primitive" ? { kind: "primitive" as const } : {}),
@@ -615,6 +642,7 @@ export function createGovernedToolkit(
           authorizedScopes: requested,
           host: hostContext,
           signal,
+          ...(toolCallId ? { toolCallId } : {}),
         };
 
         const denyAudit = (error: string, extra: Partial<AuditInput> = {}) => {
@@ -815,7 +843,10 @@ export function createGovernedToolkit(
 
         // 7. Idempotency (only when a policy is declared).
         if (spec.idempotency) {
-          const rawKey = spec.idempotency.key(args, ctx);
+          const rawKey = spec.idempotency.key(
+            args,
+            toolCallId ? { ...ctx, toolCallId } : ctx,
+          );
           // An empty key must be rejected, never treated as "no idempotency" —
           // that silently let the side effect run on every retry.
           if (typeof rawKey !== "string" || rawKey.length === 0) {
@@ -958,6 +989,7 @@ export function createGovernedToolkit(
       name: spec.name,
       description: spec.description,
       parameters: spec.parameters,
+      ...(spec.timeoutMs !== undefined ? { timeoutMs: spec.timeoutMs } : {}),
       execute,
     };
     }

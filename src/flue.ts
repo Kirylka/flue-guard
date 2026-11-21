@@ -7,7 +7,7 @@
  */
 
 import type { ContextResolver } from "./context.js";
-import { MissingContextError } from "./errors.js";
+import { isApprovalPending, MissingContextError } from "./errors.js";
 import * as v from "valibot";
 import type { FlueCompatibleTool, TrustedContext } from "./types.js";
 
@@ -15,6 +15,21 @@ import type { FlueCompatibleTool, TrustedContext } from "./types.js";
 export interface FlueRunContext {
   data?: unknown;
   signal?: AbortSignal;
+  /** Flue's id for this call; stable if Flue re-runs the same call. */
+  toolCallId?: string;
+}
+
+/**
+ * What the model sees when a call is waiting for a person. The turn ends right
+ * after it (`terminate: true`), so the model does not retry or improvise; your
+ * server delivers the decision later as a new signal.
+ */
+export interface PendingApprovalOutput {
+  status: "pending_approval";
+  tool: string;
+  /** The approval adapter's handle for the request, e.g. a ticket id. */
+  ref?: string;
+  reason?: string;
 }
 
 /**
@@ -28,7 +43,9 @@ export interface FlueToolDefinition {
   description: string;
   input: v.GenericSchema<Record<string, unknown>, unknown>;
   output: v.GenericSchema<unknown, NonNullable<unknown> | null> | undefined;
-  run: (context: FlueRunContext) => Promise<{ output: unknown }>;
+  /** Bound on one call; Flue 2.3+ enforces it, older versions ignore it. */
+  timeoutMs?: number;
+  run: (context: FlueRunContext) => Promise<{ output: unknown; terminate?: boolean }>;
 }
 
 /**
@@ -65,6 +82,11 @@ function asFlueInput(parameters: unknown): FlueToolDefinition["input"] {
  * Adapt a governed tool to Flue 2. Always wrap the handler result, including
  * objects with `output` or `terminate` keys: those are application data and
  * must never be interpreted as runtime control fields.
+ *
+ * A call suspended for approval does not reach the model as an error. Flue
+ * would show a thrown error to the model and keep the turn going, so the
+ * adapter returns a {@link PendingApprovalOutput} with `terminate: true`
+ * instead, and the turn ends. Every other error is thrown as before.
  */
 export function toFlueTool(governed: FlueCompatibleTool): FlueToolDefinition {
   return {
@@ -72,9 +94,23 @@ export function toFlueTool(governed: FlueCompatibleTool): FlueToolDefinition {
     description: governed.description,
     input: asFlueInput(governed.parameters),
     output: undefined,
-    run: async ({ data, signal }) => ({
-      output: await governed.execute(data ?? {}, undefined, signal),
-    }),
+    ...(governed.timeoutMs !== undefined ? { timeoutMs: governed.timeoutMs } : {}),
+    run: async ({ data, signal, toolCallId }) => {
+      try {
+        return {
+          output: await governed.execute(data ?? {}, undefined, signal, { toolCallId }),
+        };
+      } catch (err) {
+        if (!isApprovalPending(err)) throw err;
+        const output: PendingApprovalOutput = {
+          status: "pending_approval",
+          tool: governed.name,
+          ...(err.ref !== undefined ? { ref: err.ref } : {}),
+          ...(err.reason !== undefined ? { reason: err.reason } : {}),
+        };
+        return { output, terminate: true };
+      }
+    },
   };
 }
 

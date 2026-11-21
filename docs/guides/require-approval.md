@@ -76,13 +76,34 @@ export const ticketApproval: ApprovalAdapter = {
 };
 ```
 
-`{ pending: true }` makes the tool call throw `ApprovalPendingError`. It means
-"not yet", not "no". Nothing has run. The log records the call as
-`defer/pending`, so a call waiting for a person is on record too.
+`{ pending: true }` means "not yet", not "no". Nothing has run. The log
+records the call as `defer/pending`, so a call waiting for a person is on
+record too. What happens next depends on who called the tool.
 
-## Catch the suspension, park the run, resume
+## In a Flue agent: the turn ends
 
-When you call governed tools yourself, catch "pending" and let everything else
+Under Flue, a pending call does not show up as an error. The tool returns
+this result with `terminate: true`, and Flue ends the turn after it:
+
+```json
+{ "status": "pending_approval", "tool": "issue_refund", "ref": "T-42", "reason": "refund over $50 ($120)" }
+```
+
+The model sees that the refund is waiting, and the agent goes idle. No process
+waits for the person. Then:
+
+1. Your approval page shows the ticket. The `defer/pending` audit entry has
+   the same `ref`, and Flue's `toolCallId` if you want to link the two.
+2. When a person decides, your server records the decision on the ticket and
+   sends the conversation a new signal, for example
+   `{ kind: "signal", type: "approval.decided", body: "Ticket T-42 was approved." }`.
+3. The model calls the tool again. Every check runs again, the adapter finds
+   the approved ticket, and the refund runs once.
+
+## Calling tools yourself: catch the suspension
+
+When you call governed tools directly, outside Flue's model loop, a pending
+call throws `ApprovalPendingError`. Catch "pending" and let everything else
 through:
 
 ```ts
@@ -107,11 +128,6 @@ To resume, call the tool again. Every check runs again, and the adapter is
 asked again. This time the ticket is approved or rejected, so it gives a real
 answer. Tie the approval to the same caller, tenant, tool, and arguments, so
 it cannot approve a different action.
-
-A dispatched Flue agent works differently. Flue turns a thrown tool error into
-a message the model sees, so `ApprovalPendingError` does not pause the agent,
-and your `catch` never sees it. Your server has to save the approval request
-and send the agent a new signal once a person has decided.
 
 Because the tool is called twice, two things follow:
 

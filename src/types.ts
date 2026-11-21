@@ -95,6 +95,12 @@ export interface ExecutionContext extends TrustedContext {
   /** The raw context object passed in by the host framework, if any. */
   host?: unknown;
   /**
+   * The host's id for this tool call. Flue passes one to every tool. It stays
+   * the same if Flue re-runs the same call, and is new for each call the model
+   * makes, including the call that runs after an approval.
+   */
+  toolCallId?: string;
+  /**
    * Cancellation signal forwarded from the host (Flue passes one). Long-running
    * handlers should honor it.
    */
@@ -132,15 +138,25 @@ export type Outcome =
  * a context object to the tool ({@link hostContextResolver}); Flue provides no
  * caller identity. For dispatched agents use `withContext` inside the agent
  * function; direct calls can use `ContextStore` in `run(...)`. The third
- * argument is the host's cancellation signal, forwarded to the handler.
+ * argument is the host's cancellation signal, forwarded to the handler, and
+ * the fourth carries the host's call id.
  */
 export interface FlueCompatibleTool {
   name: string;
   description: string;
   parameters: unknown;
+  /** Bound on one call, forwarded to Flue's `timeoutMs` (Flue 2.3+). */
+  timeoutMs?: number;
   execute: (
     args: unknown,
     hostContext?: unknown,
     signal?: AbortSignal,
+    call?: ToolCallInfo,
   ) => Promise<unknown>;
+}
+
+/** What the host knows about the current tool call. */
+export interface ToolCallInfo {
+  /** The host's id for this call (Flue's `toolCallId`). */
+  toolCallId?: string;
 }

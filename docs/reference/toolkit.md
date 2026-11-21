@@ -110,7 +110,7 @@ Standard Schema and the argument type of `scope`, `idempotency.key`,
 ### `toolkit.defineGovernedTool(spec)`
 
 The lower-level form: wraps a spec into a `FlueCompatibleTool` (the governed
-intermediate with an `execute(args, hostContext?, signal?)` method). Adapt it
+intermediate with an `execute(args, hostContext?, signal?, call?)` method). Adapt it
 for Flue with [`toFlueTool`](/reference/adapters#tofluetool-and-hostcontextresolver)
 and Flue's `defineTool`. Argument types come from the explicit `TArgs`
 generic.
@@ -177,6 +177,7 @@ interface ExecutionContext extends TrustedContext {
   authorizedScopes: string[]; // the scopes this call was checked against
   host?: unknown;             // raw host context object, when one exists
   signal?: AbortSignal;       // Flue's cancellation signal, forwarded
+  toolCallId?: string;        // Flue's id for this call, when the host gives one
 }
 ```
 
