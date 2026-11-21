@@ -35,7 +35,7 @@ npm i flue-guard @flue/runtime valibot
 'use agent';
 import { useDelivery, useModel, useTool } from "@flue/runtime";
 import * as v from "valibot";
-import { govern, caller } from "flue-guard";
+import { govern } from "flue-guard";
 
 // Your application's data layer:
 declare const accounts: {
@@ -47,21 +47,19 @@ const gov = govern({ audit: "audit.jsonl" });
 
 export function SupportAgent() {
   useModel("anthropic/claude-haiku-4-5");
-  const delivery = useDelivery();
-  const attrs = delivery.kind === "signal" ? delivery.attributes : undefined;
-  if (!attrs?.actorId || !attrs.tenantId) throw new Error("Missing authenticated caller");
-
   // Your server authenticates the sender before attaching these attributes.
-  const bound = gov.withContext({
-    actor: { id: attrs.actorId, roles: ["account_holder"] },
-    tenantId: attrs.tenantId,
-  });
+  // Without them, every governed tool refuses the call.
+  const bound = gov.withSignal(useDelivery(), (attrs) =>
+    attrs.actorId && attrs.tenantId
+      ? { actor: { id: attrs.actorId, roles: ["account_holder"] }, tenantId: attrs.tenantId }
+      : undefined,
+  );
   useTool(bound.tool({
     name: "reset_password",
     description: "Send a password reset link.",
     parameters: v.object({ accountId: v.string() }),
     sideEffect: true,
-    authorize: caller((a: { accountId: string }, ctx) => accounts.ownedBy(a.accountId, ctx.actor.id)),
+    authorize: (a, ctx) => accounts.ownedBy(a.accountId, ctx.actor.id),
     idempotency: { key: (a) => `reset:${a.accountId}` },
     execute: async (a) => {
       await accounts.sendResetLink(a.accountId);
@@ -99,7 +97,7 @@ rejects them first, and they show up in Flue's events, not in this log.
 
 The caller's identity comes from your server, never from the conversation.
 Flue runs a dispatched agent separately from your request, so the identity
-travels with the signal and the agent binds it with `withContext`.
+travels with the signal and the agent binds it with `withSignal`.
 [Run on Cloudflare Workers](https://kirylka.github.io/flue-guard/guides/cloudflare-workers#_3-bind-context-per-invocation-when-flue-dispatches)
 explains why `gov.run` around `dispatch()` is not enough.
 

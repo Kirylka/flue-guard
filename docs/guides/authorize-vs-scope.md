@@ -17,7 +17,7 @@ Every example below uses this toolkit:
 
 ```ts setup
 import * as v from "valibot";
-import { govern, caller, trusted } from "flue-guard";
+import { govern, trusted } from "flue-guard";
 
 const gov = govern({ audit: "audit.jsonl" });
 ```
@@ -88,19 +88,15 @@ export const closeAccount = gov.tool({
   description: "Close an account the caller owns.",
   parameters: v.object({ accountId: v.string() }),
   sideEffect: true,
-  authorize: caller(
-    (a: { accountId: string }, ctx) => accounts.ownedBy(a.accountId, ctx.actor.id),
-  ),
+  authorize: (a, ctx) => accounts.ownedBy(a.accountId, ctx.actor.id),
   execute: async (a) => ({ closed: a.accountId }),
 });
 ```
 
-::: tip Annotate the argument type
-TypeScript cannot work out the type of `a` inside `caller(...)`, because it
-reads `caller` before `parameters`. So write it out:
-`caller((a: { accountId: string }, ctx) => …)`. If you prefer no annotation,
-the object form `{ anchor: "caller", check: (a, ctx) => … }` infers the type.
-:::
+A plain function in `authorize` is checked against the caller. It is the
+same as `caller(fn)` from `flue-guard`, which says the anchor out loud. Inside
+`gov.tool`, only the plain function gets the type of `a` from `parameters`;
+with `caller(...)`, write it out: `caller((a: { accountId: string }, ctx) => …)`.
 
 **Anchor 2: a lookup you registered.** For account recovery, where nobody is
 logged in. Your server runs the named lookup and passes the result to your
@@ -151,9 +147,7 @@ export const transferDomain = gov.tool({
   sideEffect: true,
   requireRoles: ["account_admin"],                    // coarse: who may ever call this
   scope: (a) => `account:${a.accountId}`,             // territory: within the caller's grants
-  authorize: caller(                                  // ownership: this caller, this account
-    (a: { accountId: string }, ctx) => accounts.ownedBy(a.accountId, ctx.actor.id),
-  ),
+  authorize: (a, ctx) => accounts.ownedBy(a.accountId, ctx.actor.id), // ownership: this caller, this account
   approval: true,                                     // and a human signs off
   execute: async (a) => registrar.transfer(a.accountId, a.to),
 });

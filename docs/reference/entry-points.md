@@ -33,7 +33,7 @@ adapter *interfaces*; implementations live on subpaths so they don't crowd it.
 | Export | Description |
 | --- | --- |
 | `GovernOptions`, `GovernedToolkitOptions` | Options for `govern` / `createGovernedToolkit` |
-| `GovernedToolkit` | The toolkit: `tool`, `defineGovernedTool`, `withContext`, `run`, `current`, `peek` |
+| `GovernedToolkit` | The toolkit: `tool`, `defineGovernedTool`, `withContext`, `withSignal`, `run`, `current`, `peek` |
 | `GovernedToolSpec`, `GovernedFlueToolSpec` | The tool spec (explicit-generic and schema-inferred forms) |
 | `ToolGuard`, `GuardRequest`, `GuardAssessment` | Provider-neutral semantic guard interfaces |
 | `AuthorizeSpec`, `TrustedSource` | Authorization gate shapes |

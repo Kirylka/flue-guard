@@ -94,7 +94,29 @@ refused rather than treated as in scope.
 
 ## `authorize`
 
-A per-call check keyed to a declared trusted anchor. Two anchors:
+A per-call check keyed to a declared trusted anchor. The usual one is the
+caller. Write it as a plain function; inside `gov.tool`, the type of `a` comes
+from `parameters`:
+
+```ts
+import * as v from "valibot";
+import { govern } from "flue-guard";
+
+declare const ownsAccount: (actorId: string, accountId: string) => Promise<boolean>;
+const gov = govern({ audit: false });
+
+export const closeAccount = gov.tool({
+  name: "close_account",
+  description: "Close an account.",
+  parameters: v.object({ accountId: v.string() }),
+  sideEffect: true,
+  authorize: (a, ctx) => ownsAccount(ctx.actor.id, a.accountId),
+  execute: async (a) => `closed ${a.accountId}`,
+});
+```
+
+The helpers name the anchor explicitly. `trusted` is the only way to use a
+trusted source:
 
 ```ts
 import { caller, trusted } from "flue-guard";
@@ -114,12 +136,14 @@ export const bySource = trusted(
 );
 ```
 
-`caller` and `trusted` build the underlying `AuthorizeSpec`:
+`caller` and `trusted` build the underlying `AuthorizeSpec`; a plain function
+is the same as `caller(fn)`:
 
 ```ts
 import type { ExecutionContext } from "flue-guard";
 
 type AuthorizeSpec<TArgs> =
+  | ((args: TArgs, ctx: ExecutionContext) => boolean | Promise<boolean>)
   | { anchor: "caller"; check: (args: TArgs, ctx: ExecutionContext) => boolean | Promise<boolean> }
   | { anchor: { trustedSource: string }; check: (args: TArgs, source: unknown) => boolean | Promise<boolean> };
 ```
@@ -127,10 +151,10 @@ type AuthorizeSpec<TArgs> =
 A `false` result throws `AuthorizationDeniedError`. A spec that names an
 unregistered trusted source fails at definition time.
 
-Typing: inside `gov.tool({ ... })`, TypeScript reads `caller(...)` before
-`parameters`, so it cannot work out the type of `a`. Write it out,
-`caller((a: { accountId: string }, ctx) => …)`, or use the object form, which
-infers it.
+Typing: inside `gov.tool({ ... })`, TypeScript reads `caller(...)` and
+`trusted(...)` before `parameters`, so it cannot work out the type of `a`.
+Write it out, `caller((a: { accountId: string }, ctx) => …)`, or use the plain
+function or the object form, which infer it.
 
 ## `guard`
 
