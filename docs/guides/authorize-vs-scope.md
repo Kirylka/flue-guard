@@ -1,12 +1,12 @@
 # Choose authorize vs scope
 
-Both run on every call. Both compare the arguments the model wrote with what
-your application knows about the caller. They answer different questions:
+Both run on every call, and both compare what the model wrote with what your
+app knows about the caller. The difference is the question they answer:
 
-| Gate | Question it answers | Use when |
+| Check | The question | Reach for it when |
 | --- | --- | --- |
-| `scope` | "Is this call inside the caller's allowed territory?" | The grant is enumerable up front: tenants, customer lists, entitlements |
-| `authorize` | "Is this caller allowed to do this to this target?" | The answer needs a lookup: ownership, record state, a server-side anchor |
+| `scope` | "Is this inside what the caller was given?" | You can list what they may touch up front: a tenant, a set of customers, their plan |
+| `authorize` | "May this caller do this to this record?" | You have to look something up to know: who owns it, what state it's in, what's on file |
 
 A tool with `sideEffect: true` must declare at least one check: `scope`,
 `authorize`, `requireRoles`, or `approval`. Without one, defining the tool
@@ -22,7 +22,7 @@ import { govern, trusted } from "flue-guard";
 const gov = govern({ audit: "audit.jsonl" });
 ```
 
-## Gate by scope: enumerable grants
+## Gate by scope: when you can list it up front
 
 You declare what the call *wants to touch*. The library compares that with the
 `scopes` your application put on the context. You never write the comparison

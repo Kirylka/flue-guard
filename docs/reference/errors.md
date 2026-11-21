@@ -18,7 +18,7 @@ const tool: string | undefined = err.tool;  // the tool the decision applied to
 
 | Class | `code` | Thrown when |
 | --- | --- | --- |
-| `MissingContextError` | `missing_context` | A governed tool ran with no trusted context bound (no surrounding `run(...)`, or the resolver threw). |
+| `MissingContextError` | `missing_context` | A governed tool ran with no trusted context bound: no surrounding `run(...)`, the resolver threw, or the delivery given to `withSignal` named no caller. |
 | `AccessDeniedError` | `access_denied` | The actor lacks every role in `requireRoles`. Carries `requiredRoles: string[]`. |
 | `ScopeViolationError` | `scope_violation` | A derived scope is outside `ctx.scopes`, or a scope-only-gated side effect derived no scopes. Carries `requested: string[]` and `allowed: string[]`. |
 | `AuthorizationDeniedError` | `authorization_denied` | The `authorize` check returned `false`. |

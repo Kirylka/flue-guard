@@ -10,8 +10,8 @@ The model writes the arguments. Your application knows the caller.
 Every `accountId`, `amount`, or `query` in a tool call comes from the model.
 The conversation can talk the model into any value, so treat each one as a
 claim, not a fact. The caller's identity, tenant, and scopes come from your
-authenticated request. They travel separately, through `AsyncLocalStorage` or
-an explicit `withContext`. Nothing the model outputs can read or change them.
+authenticated request. They travel separately, through `AsyncLocalStorage`,
+`withContext`, or the signal attributes `withSignal` reads. Nothing the model outputs can read or change them.
 
 Every check compares those two things, and the API keeps you from getting the
 comparison backwards. With `scope`, you only say what the call touches, and
@@ -38,6 +38,9 @@ arguments cannot be written at all.
   nesting are converted first.
 - A repeat is refused rather than run twice. If your code succeeded but the
   result could not be stored, the key stays locked and a retry gets a conflict.
+- A call waiting for a person runs nothing, and under Flue it ends the turn.
+  The model is told the call is waiting; it does not get an error to argue
+  with or work around.
 
 ## Not guaranteed, on purpose
 
@@ -59,6 +62,12 @@ arguments cannot be written at all.
   you, copy the log somewhere that only allows appending.
 - **Several writers on one file.** `HashChainAuditLog` expects one writer.
   With several instances, use a store-backed log.
+- **That a signal tells the truth.** `withSignal` believes the attributes it
+  is given. If anything other than your authenticated server can send the
+  agent a signal with an `actorId`, that sender can pick who they are.
+- **That a timed-out handler stops.** `timeoutMs` makes Flue stop waiting and
+  aborts `ctx.signal`. Code that ignores the signal keeps going, and the log
+  records how it ended.
 
 ## Free-form tools are declared, not checked
 

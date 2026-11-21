@@ -7,23 +7,27 @@
 **[Documentation](https://kirylka.github.io/flue-guard/)** · ESM-only · Node
 22.19+ · peer `@flue/runtime` ^2.0.8
 
-Every tool you hand an agent is a function the model chooses to call, with
-arguments the model writes. Flue says this plainly: [a tool's parameters are
-model-selected inputs, not an authorization
-boundary](https://flueframework.com/docs/guide/tools/#protect-access). The check
-has to live somewhere else. flue-guard is that somewhere.
+When you give an agent a tool, the model decides when to call it and writes
+the arguments. That's the whole point, and it's also the problem. If the tool
+resets a password, the model is the one typing the account id. Flue says it
+plainly: [a tool's parameters are model-selected inputs, not an authorization
+boundary](https://flueframework.com/docs/guide/tools/#protect-access).
 
-It wraps a Flue tool and runs your checks before the handler. Is this caller
-allowed to touch this record? Has this operation already run? What gets written
-down about it? A denied call never reaches your code. A retried call never
-repeats the side effect. Every decision lands in a hash-chained log you can
-verify later.
+So the "is this person allowed to do that?" check has to live somewhere the
+model can't reach. flue-guard is that place. It wraps a Flue tool and asks
+three questions before your code runs:
 
-You want it as soon as a tool does something real. An agent that reads a public
-help article is fine without a gate. One that resets a password, issues a
-refund, or closes an account is not. The model picks the account id there,
-and a careful prompt is not a check. flue-guard refuses to define a side-effecting
-tool that has no gate at all, so the missing check cannot ship by accident.
+- **May this caller touch this record?** If not, your handler never runs.
+- **Has this already happened?** A retry gets the first result back, so
+  nobody is refunded twice.
+- **What do we write down?** Every decision, yes or no, goes into a
+  hash-chained log you can check later.
+
+You don't need it for an agent that reads public help articles. You do once a
+tool changes something real: a password, a refund, an account. A careful
+prompt is not a check. And if you forget the check, flue-guard won't let the
+tool load, so the mistake shows up on your machine instead of in an incident
+report.
 
 ## Quickstart
 
@@ -90,14 +94,15 @@ await dispatch(SupportAgent, {
 });
 ```
 
-The tool checks that the caller owns the account before it sends anything. A
-retry of a finished call returns the first result. Every decision goes into
-the audit log. Arguments that fail the schema never reach flue-guard: Flue
-rejects them first, and they show up in Flue's events, not in this log.
+Here's what you get. Before anything is sent, the tool checks that the caller
+owns the account. If the model retries, the caller gets the first result
+instead of a second email. Every decision lands in the audit log. (Arguments
+that don't match the schema never get this far: Flue turns them away first,
+and you'll find them in Flue's events rather than in this log.)
 
-The caller's identity comes from your server, never from the conversation.
-Flue runs a dispatched agent separately from your request, so the identity
-travels with the signal and the agent binds it with `withSignal`.
+Notice where the caller comes from: your server, never the chat. Flue runs a
+dispatched agent separately from your request, so the identity rides along
+on the signal, and `withSignal` picks it up.
 [Run on Cloudflare Workers](https://kirylka.github.io/flue-guard/guides/cloudflare-workers#_3-bind-context-per-invocation-when-flue-dispatches)
 explains why `gov.run` around `dispatch()` is not enough.
 
@@ -110,33 +115,33 @@ explains why `gov.run` around `dispatch()` is not enough.
 | [Reference](https://kirylka.github.io/flue-guard/reference/entry-points) | Every entry point, tool-spec field, error, and adapter interface |
 | [Explanation](https://kirylka.github.io/flue-guard/explanation/why-flue-guard) | Why it exists, the pipeline, the trust model |
 
-## Things to know
+## Things that trip people up
 
-- Results must be JSON-plain. Flue serializes what the model sees (the
-  handler's return, or `toModelOutput`'s) and rejects `bigint`, `Date`, class
-  instances, and circular structures.
-- Use Valibot for `parameters`. Any other validator still governs and
-  validates internally, but Flue's schema guidance for the model degrades to
-  an unconstrained object. With Valibot, the model sees the real shape.
-- Idempotency keys and requested scopes are written to the log unmasked,
-  because that is how you find related entries. Build them from stable ids,
-  never from secrets or personal data.
-- The file audit sink is single-writer: one process, one instance. For
-  multi-instance deployments use a store-backed sink such as the
-  [D1 reference adapter](https://github.com/Kirylka/flue-guard/blob/main/examples/cloudflare-adapters.ts).
+- **Return plain JSON.** Flue turns your result into JSON for the model, and
+  it refuses `bigint`, `Date`, class instances, and objects that point back at
+  themselves. Strings, numbers, arrays and plain objects are all fine.
+- **Use Valibot for `parameters`.** Other validators still work, and the
+  arguments are still checked, but the model only sees "some object". With
+  Valibot it sees the real fields.
+- **Keep secrets out of keys and scopes.** Idempotency keys and scopes go into
+  the log as-is, because that's how you find related entries later. Build them
+  from ids, never from emails, tokens or anything personal.
+- **One file, one writer.** The file log assumes one process. If you run
+  several instances, keep the log in a database instead, like the
+  [D1 example](https://github.com/Kirylka/flue-guard/blob/main/examples/cloudflare-adapters.ts).
 
 ## Entry points
 
 | Import | What's there |
 | --- | --- |
-| `flue-guard` | `govern`, `createGovernedToolkit`, `caller`, `trusted`, core types, the error taxonomy, adapter **interfaces** |
+| `flue-guard` | `govern`, `createGovernedToolkit`, `caller`, `trusted`, core types, the errors, adapter **interfaces** |
 | `flue-guard/audit` | `hashEntry`, `verifyChain`, `HashChainAuditLog`, `InMemoryAuditLog` |
 | `flue-guard/adapters` | default RBAC / redaction / idempotency, scope helpers, `toFlueTool` |
 | `flue-guard/testing` | in-memory test doubles |
 | `flue-guard/jev` | `createJevGuard` (experimental; needs `@typesafe-ai/sdk`) |
 
-Start with `govern()`. `createGovernedToolkit` builds the same toolkit, but you
-pass Flue's `defineTool` to it yourself.
+Start with `govern()`. You'll rarely need `createGovernedToolkit`; it builds the
+same toolkit, but you pass Flue's `defineTool` in yourself.
 
 ## See it run
 
@@ -147,18 +152,19 @@ npm run example   # mock-model walkthrough: denials, replay, approval, audit ver
 npm run spike     # a real Flue dispatched turn with a faux model, no API key
 ```
 
-[`examples/audit-viewer.html`](./examples/audit-viewer.html) verifies an
-`audit.jsonl` hash chain in your browser and lets you tamper with a line to
-watch verification catch it.
+For something more hands-on, open
+[`examples/audit-viewer.html`](./examples/audit-viewer.html). It checks an
+`audit.jsonl` file in your browser, and lets you edit a line and watch the
+check catch it.
 
 ## Optional guard step
 
-`authorize` decides who may call a tool. It cannot read the reply the agent is
-about to send and notice an internal note in it. A `guard` can: it reads the
-call and allows it, refuses it, or hands it to a human. The adapter we ship,
-`flue-guard/jev`, asks TypeSafe's Jev model whether the call breaks a policy you
-wrote in plain English. It never replaces `authorize`. Experimental, and it
-needs `@typesafe-ai/sdk`. See
+`authorize` answers "who may do this?". It can't read the reply your agent is
+about to send and notice that an internal note slipped in. A `guard` can. It
+reads the whole call and says yes, no, or "ask a person". The one we ship,
+`flue-guard/jev`, asks TypeSafe's Jev model whether the call breaks a policy
+you wrote in plain English. It adds to `authorize`; it never replaces it. It's
+experimental and needs `@typesafe-ai/sdk`. See
 [Add a Jev guard](https://kirylka.github.io/flue-guard/guides/jev-guard).
 
 ## License
