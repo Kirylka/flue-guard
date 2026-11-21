@@ -24,7 +24,10 @@ interface GovernedToolSpec<TArgs, TResult> {
   scope?: (args: TArgs, ctx: TrustedContext) => string | string[];
   authorize?: AuthorizeSpec<TArgs>;
   guard?: ToolGuard<TArgs>;
-  idempotency?: { key: (args: TArgs, ctx: TrustedContext) => string; ttlMs?: number };
+  idempotency?: {
+    key: (args: TArgs, ctx: TrustedContext & { toolCallId?: string }) => string;
+    ttlMs?: number;
+  };
   approval?: ApprovalPolicy<TArgs>;
   canApprove?: (approver: string, args: TArgs, ctx: TrustedContext) => boolean | Promise<boolean>;
   redact?: Redactor;
@@ -32,6 +35,7 @@ interface GovernedToolSpec<TArgs, TResult> {
   kind?: "scoped" | "primitive";
   egressControlled?: boolean;
   unsafeAllowUnauthorized?: boolean;
+  timeoutMs?: number;
   execute: (args: TArgs, ctx: ExecutionContext) => Promise<TResult> | TResult;
 }
 ```
@@ -147,6 +151,7 @@ At-most-once execution per logical operation. `key` must return a stable,
 non-empty string; an empty key throws `GovernanceConfigError` at call time.
 Keys are namespaced per tool and per tenant, recorded on audit entries
 unredacted, and honored for `ttlMs` milliseconds (forever when omitted).
+`ctx.toolCallId` is the host's id for the call, when it gives one.
 Behavior table and design guidance:
 [Make retries safe](/guides/safe-retries).
 
@@ -218,10 +223,21 @@ Escape hatch: permits defining a side-effecting tool with no gate. Off by
 default because an ungated side-effecting tool is exactly the bug class this
 library exists to prevent. Prefer any real gate.
 
+## `timeoutMs`
+
+A limit on one call, in milliseconds, passed to Flue's tool `timeoutMs`. When
+it runs out, Flue 2.3+ aborts `ctx.signal` and tells the model the call timed
+out; the conversation goes on. Older Flue versions ignore it. The checks
+before the handler count against the limit too. Must be a positive whole
+number, or definition fails with `GovernanceConfigError`.
+
+Flue stops waiting, but a handler that ignores `ctx.signal` keeps running and
+its outcome is still logged. Pass the signal to `fetch` and similar calls.
+
 ## `execute`
 
 The handler. Receives validated arguments and the `ExecutionContext`
-(including `authorizedScopes` and Flue's `AbortSignal`). Under Flue the
+(including `authorizedScopes`, Flue's `AbortSignal`, and Flue's `toolCallId`). Under Flue the
 return value must be JSON-plain: no `bigint`, `Date`, class instances, or
 circular structures. Handler exceptions propagate to the host unchanged and
 are recorded as `allow/error` audit entries.

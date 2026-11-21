@@ -41,8 +41,9 @@ export type {
   ArgValidator,
   ParseValidator,
   FnValidator,
+  ToolCallInfo,
 } from "./types.js";
-export type { FlueToolDefinition } from "./flue.js";
+export type { FlueToolDefinition, PendingApprovalOutput } from "./flue.js";
 export type { GuardAssessment, GuardRequest, ToolGuard } from "./guard.js";
 
 // --- Trusted-context propagation -------------------------------------------

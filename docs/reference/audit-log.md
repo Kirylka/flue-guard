@@ -24,6 +24,7 @@ interface AuditEntry {
   outcome: Outcome;         // "executing" | "success" | "error" | "denied" | "replayed" | "pending"
   requestedScopes: string[]; // unredacted
   requestId?: string;
+  toolCallId?: string;      // the host's id for the call (Flue's toolCallId)
   idempotencyKey?: string;  // unredacted
   approver?: string;
   args?: unknown;           // after redaction

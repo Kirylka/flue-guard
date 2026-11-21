@@ -64,6 +64,8 @@ export interface AuditEntry {
   outcome: Outcome;
   requestedScopes: string[];
   requestId?: string;
+  /** The host's id for this tool call (Flue's `toolCallId`), when it gave one. */
+  toolCallId?: string;
   idempotencyKey?: string;
   /** Approver id, when the call passed through an approval adapter. */
   approver?: string;

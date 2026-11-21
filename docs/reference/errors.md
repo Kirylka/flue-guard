@@ -24,7 +24,7 @@ const tool: string | undefined = err.tool;  // the tool the decision applied to
 | `AuthorizationDeniedError` | `authorization_denied` | The `authorize` check returned `false`. |
 | `GuardDeniedError` | `guard_denied` | The guard denied the action. |
 | `GuardUnavailableError` | `guard_unavailable` | Guard evaluation, argument cloning, cancellation, or its deadline failed. Execution is blocked. |
-| `ApprovalPendingError` | `approval_pending` | Approval is required and not yet decided. A suspend signal; carries `ref?: string`, the adapter's handle. |
+| `ApprovalPendingError` | `approval_pending` | Approval is required and not yet decided. A suspend signal; carries `ref?: string`, the adapter's handle, and `reason?: string`. Under Flue it ends the turn instead of being thrown (see below). |
 | `ApprovalDeniedError` | `approval_denied` | Approval was required and not granted, or required with no adapter configured. |
 | `IdempotencyConflictError` | `idempotency_conflict` | Another in-flight call holds the same idempotency key. Carries `key: string`. |
 | `GovernanceConfigError` | `config_error` | The tool or toolkit is misdefined: ungated side effect, unattested side-effecting primitive, unknown trusted source, `tool()` without `defineTool`, empty idempotency key, empty HMAC key. Usually thrown at definition time. |
@@ -76,7 +76,10 @@ try {
 ## How errors surface through Flue
 
 Inside a Flue run, a governed tool that throws produces a tool error the
-model can see and react to; the agent turn continues. The error entries were
+model can see and react to; the agent turn continues. The exception is
+`ApprovalPendingError`: the tool returns a `pending_approval` result and
+ends the turn, so the model does not retry or carry on while a person
+decides. The error entries were
 already written to the audit log by the time the model hears about it.
 Denials also carry enough context on the audit entry (`error` code,
 `requestedScopes`, `args` after redaction) to reconstruct the refusal later.

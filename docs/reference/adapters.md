@@ -189,9 +189,15 @@ export const ping = defineTool(
 `parameters` schema becomes the tool's `input` unchanged. Any other validator
 becomes an open object: the arguments still arrive and are checked inside,
 but the model gets no description of their shape. The
-governed handler runs from Flue's `run({ data, signal })`. Its result is
-wrapped in `{ output }`, including when the result itself contains `output`
-or `terminate` properties. Those fields remain application data.
+governed handler runs from Flue's `run({ data, signal, toolCallId })`. Its
+result is wrapped in `{ output }`, including when the result itself contains
+`output` or `terminate` properties. Those fields remain application data.
+A spec's `timeoutMs` is copied to the Flue tool.
+
+One error is not thrown: a call waiting for approval returns
+`{ output: { status: "pending_approval", tool, ref?, reason? }, terminate: true }`,
+so Flue ends the turn instead of showing the model an error. The type of
+`output` is exported as `PendingApprovalOutput`.
 
 `hostContextResolver(extract)` builds a `ContextResolver` for **non-Flue**
 hosts that pass a context object to tools. Flue's `run` receives no host

@@ -52,6 +52,12 @@ that stored result. `execute` does not run again. The log shows the repeat as
   `""` throws `GovernanceConfigError` when the tool is called.
 - Keys are separated by tool and by tenant for you. The same key in two tools
   or two tenants never mixes up their results.
+- `ctx.toolCallId` is Flue's id for the call. It is the same when Flue runs
+  the same call again, and new each time the model calls the tool. So a key
+  built only from it stops a double run of one call, but not the model asking
+  twice, and not the second call after an approval. Prefer ids from the
+  arguments; add `ctx.toolCallId` only when two calls with the same arguments
+  really are two operations.
 
 ## What a retry actually gets
 
@@ -98,3 +104,13 @@ your own, keep one rule: **a claim that is still running never expires**.
 Expiring it would let a slow operation start a second time. Only `complete()`
 or `fail()` releases it. If a process crashes in the middle, call `fail()`
 when it restarts, or use a store with leases.
+
+## Flue's durable tools
+
+Flue has its own way to survive a crash: a tool declared `durable: true` puts
+each side effect in `step.do(...)`, and Flue re-runs an interrupted call,
+replaying the steps that already finished. `gov.tool` does not make durable
+tools yet, and the two do not combine well: the re-run would find its own
+idempotency key still claimed and be refused. Use flue-guard's key when you
+need retries refused or replayed across calls and across instances, which
+is the common case for an agent.
