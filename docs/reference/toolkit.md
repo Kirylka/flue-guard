@@ -131,12 +131,28 @@ and addressable agents, where tool calls run detached from your caller and
 `AsyncLocalStorage` cannot reach them; see
 [Run on Cloudflare Workers](/guides/cloudflare-workers#_3-bind-context-per-invocation-when-flue-dispatches).
 
+### `toolkit.withSignal(delivery, toContext)`
+
+`withContext` for a Flue signal. Pass `useDelivery()` and a function that maps
+the signal's `attributes` (`Record<string, string>`) to a `TrustedContext`, or
+returns `undefined` when they don't name a caller.
+
+| Delivery | Governed tool calls |
+| --- | --- |
+| A signal whose attributes `toContext` maps | Run as that caller |
+| Not a signal, no attributes, or `toContext` returns `undefined` | Refused with `MissingContextError` |
+| `toContext` throws | Refused with that error |
+
+Every refusal is logged, and the agent function itself keeps running, so the
+agent can still answer without tools. Use it only for signals your own server
+sends after it has authenticated the caller.
+
 ### `toolkit.run(context, fn)`
 
 Binds `context` (via the toolkit's `ContextStore`) for governed tools executing
 inside `fn`. It does not reach detached execution from `dispatch()` or
 `init().dispatch()`, even if the caller subsequently awaits the reply; use
-`withContext` inside those agents. Unavailable when the toolkit was constructed
+`withSignal` or `withContext` inside those agents. Unavailable when the toolkit was constructed
 with a custom resolver function.
 
 ### `toolkit.current()` / `toolkit.peek()`

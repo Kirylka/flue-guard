@@ -68,14 +68,15 @@ const base = govern({ audit: d1Audit });
 
 export function SupportAgent() {
   useModel("anthropic/claude-haiku-4-5");
-  const delivery = useDelivery();
-  const attrs = delivery.kind === "signal" ? delivery.attributes : undefined;
-  if (!attrs?.actorId || !attrs.tenantId) throw new Error("Missing authenticated caller");
-  const bound = base.withContext({
-    actor: { id: attrs.actorId, roles: ["account_holder"] },
-    tenantId: attrs.tenantId,
-    scopes: [`account:${attrs.actorId}`],
-  });
+  const bound = base.withSignal(useDelivery(), (attrs) =>
+    attrs.actorId && attrs.tenantId
+      ? {
+          actor: { id: attrs.actorId, roles: ["account_holder"] },
+          tenantId: attrs.tenantId,
+          scopes: [`account:${attrs.actorId}`],
+        }
+      : undefined,
+  );
   useTool(bound.tool({
     name: "reset_password",
     description: "Send a password reset link.",
@@ -91,11 +92,15 @@ export function SupportAgent() {
 Your server must check who sent the request before it sets `actorId` and
 `tenantId`, and check that they may write to that conversation. Never copy
 these attributes from request JSON. Bind the toolkit again on every call of
-the agent function, so the tools use the caller of the current message.
+the agent function, so the tools use the caller of the current message. A
+message without the attributes, such as a plain user message, still gets an
+answer, but every governed tool refuses the call with `MissingContextError`.
+`withSignal` is a shortcut for `withContext`; use `withContext` when the
+identity comes from somewhere else.
 
 When you call a tool yourself and wait for it inside your own callback,
 `gov.run(...)` works too. `init().dispatch()` behaves like `dispatch()` and
-needs `withContext` as well.
+needs `withSignal` as well.
 
 There is no separate build for the edge, on purpose. One import that works
 with `nodejs_compat` is less to learn, and Flue needs that flag anyway.

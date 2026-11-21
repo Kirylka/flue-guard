@@ -27,6 +27,7 @@ export type {
   AuthorizeSpec,
   TrustedSource,
   FlueDefineTool,
+  SignalDelivery,
 } from "./toolkit.js";
 
 // --- Core types ------------------------------------------------------------

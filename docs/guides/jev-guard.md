@@ -16,7 +16,7 @@ The example below governs one ticket-reply tool, set up as usual:
 
 ```ts setup
 import * as v from "valibot";
-import { govern, caller } from "flue-guard";
+import { govern } from "flue-guard";
 
 declare const tickets: {
   owns(actorId: string, ticketId: string): Promise<boolean>;
@@ -48,7 +48,7 @@ export const reply = gov.tool({
   description: "Reply to a customer ticket",
   parameters: v.object({ ticketId: v.string(), text: v.string() }),
   sideEffect: true,
-  authorize: caller((a: Reply, ctx) => tickets.owns(ctx.actor.id, a.ticketId)),
+  authorize: (a, ctx) => tickets.owns(ctx.actor.id, a.ticketId),
   guard,
   execute: (a) => tickets.reply(a.ticketId, a.text),
 });

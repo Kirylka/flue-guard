@@ -41,7 +41,7 @@ the result to a log.
 
 ```ts
 import * as v from "valibot";
-import { govern, caller } from "flue-guard";
+import { govern } from "flue-guard";
 
 declare const accounts: {
   ownedBy(accountId: string, actorId: string): Promise<boolean>;
@@ -56,9 +56,7 @@ export const resetPassword = gov.tool({
   parameters: v.object({ accountId: v.string() }),
   sideEffect: true,
   // Only the owner of the account may reset it.
-  authorize: caller(
-    (a: { accountId: string }, ctx) => accounts.ownedBy(a.accountId, ctx.actor.id),
-  ),
+  authorize: (a, ctx) => accounts.ownedBy(a.accountId, ctx.actor.id),
   // A retry of the same reset returns the first result instead of sending again.
   idempotency: { key: (a) => `reset:${a.accountId}` },
   execute: async (a) => {

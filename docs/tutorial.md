@@ -23,7 +23,7 @@ Create `first-tool.ts`:
 ```ts
 // first-tool.ts
 import * as v from "valibot";
-import { govern, caller, isGovernanceDenial } from "flue-guard";
+import { govern, isGovernanceDenial } from "flue-guard";
 import { HashChainAuditLog } from "flue-guard/audit";
 
 // A stand-in account store. This mapping is the server-side truth;
@@ -42,9 +42,7 @@ const resetPassword = gov.tool({
   parameters: v.object({ accountId: v.string() }),
   sideEffect: true,
   // The authorization gate: the caller must own the account they name.
-  authorize: caller(
-    (a: { accountId: string }, ctx) => owners.get(a.accountId) === ctx.actor.id,
-  ),
+  authorize: (a, ctx) => owners.get(a.accountId) === ctx.actor.id,
   execute: async (a) => {
     console.log(`  [side effect] reset link sent for ${a.accountId}`);
     return `Sent a reset link for ${a.accountId}.`;
@@ -146,7 +144,7 @@ happen.
 ## Where to go next
 
 You have a governed tool. Give it to your agent like any other Flue tool. In
-a real agent you bind the caller with `gov.withContext(...)` instead of
+a real agent you bind the caller with `gov.withSignal(...)` instead of
 `gov.run(...)`; [Run on Cloudflare Workers](/guides/cloudflare-workers#_3-bind-context-per-invocation-when-flue-dispatches)
 shows how and explains why.
 

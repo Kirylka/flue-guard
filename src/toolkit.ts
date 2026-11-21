@@ -56,6 +56,7 @@ import {
   GovernanceConfigError,
   GovernanceError,
   IdempotencyConflictError,
+  MissingContextError,
   ScopeViolationError,
 } from "./errors.js";
 
@@ -70,6 +71,16 @@ export type TrustedSource = (
 ) => unknown | Promise<unknown>;
 
 /**
+ * A check keyed to the authenticated caller, written as a plain function.
+ * Same as `caller(check)`; with `gov.tool`, a plain function is the form whose
+ * `args` type TypeScript infers from `parameters`.
+ */
+export type CallerCheck<TArgs> = (
+  args: TArgs,
+  ctx: ExecutionContext,
+) => boolean | Promise<boolean>;
+
+/**
  * Authorization keyed to a *declared trusted anchor*, not to the arguments
  * alone — so the manifest can record the anchor honestly and the common footgun
  * (comparing an arg to nothing trusted) has no shape to be written in.
@@ -81,6 +92,7 @@ export type TrustedSource = (
  *    anonymous-recovery-style checks where there is no authenticated actor.
  */
 export type AuthorizeSpec<TArgs> =
+  | CallerCheck<TArgs>
   | {
       anchor: "caller";
       check: (args: TArgs, ctx: ExecutionContext) => boolean | Promise<boolean>;
@@ -92,12 +104,15 @@ export type AuthorizeSpec<TArgs> =
 
 /**
  * Authorize keyed to the authenticated caller. The check receives the trusted
- * execution context — key the decision to `ctx.actor`. Prefer this helper over
- * the raw object: `args` is inferred (it's pinned by the tool's `parameters`),
- * and the call site reads lighter.
+ * execution context — key the decision to `ctx.actor`. Same as passing the
+ * check itself as `authorize`.
+ *
+ * With `gov.tool`, TypeScript cannot infer `args` through this helper (it is
+ * a nested generic call, typed before `parameters` is), so either annotate
+ * `args` or pass the plain function, which is inferred:
  *
  * ```ts
- * authorize: caller((a, ctx) => owns(ctx.actor.id, a.accountId))
+ * authorize: (a, ctx) => owns(ctx.actor.id, a.accountId)
  * ```
  */
 export function caller<TArgs = Record<string, unknown>>(
@@ -109,7 +124,7 @@ export function caller<TArgs = Record<string, unknown>>(
 /**
  * Authorize against a registered trusted source (resolved server-side and
  * passed to the check) — for anonymous-recovery-style checks with no
- * authenticated actor. `args` is inferred.
+ * authenticated actor. With `gov.tool`, annotate `args`; see {@link caller}.
  *
  * ```ts
  * authorize: trusted("accountEmail", (a, email) => a.resetEmail === email)
@@ -238,6 +253,14 @@ export type GovernedFlueToolSpec<S extends StandardSchemaV1, TResult> = Omit<
   "parameters"
 > & { parameters: S };
 
+/**
+ * The part of Flue's `DeliveredMessage` (from `useDelivery()`) that
+ * {@link GovernedToolkit.withSignal} reads.
+ */
+export type SignalDelivery =
+  | { kind: "signal"; attributes?: Record<string, string> }
+  | { kind: string; attributes?: undefined };
+
 /** Flue's `defineTool`, injected so the core stays free of any Flue import. */
 export type FlueDefineTool = (tool: FlueToolDefinition) => FlueToolDefinition;
 
@@ -315,6 +338,22 @@ export interface GovernedToolkit {
    * All other collaborators (audit, idempotency, adapters) are shared.
    */
   withContext(context: TrustedContext | ContextResolver): GovernedToolkit;
+  /**
+   * `withContext` for a Flue delivery. Pass `useDelivery()` and a function that
+   * maps the signal's attributes to the trusted context, or returns `undefined`
+   * when they don't name a caller. When the delivery is not a signal, has no
+   * attributes, or `toContext` returns `undefined`, governed tools refuse
+   * every call with {@link MissingContextError}; if `toContext` throws, they
+   * refuse with that error. Either way the refusal is logged and the agent
+   * itself still runs, so it can answer without tools.
+   *
+   * Only use it for signals your own server sent after authenticating the
+   * caller: the attributes are trusted as they are.
+   */
+  withSignal(
+    delivery: SignalDelivery,
+    toContext: (attributes: Record<string, string>) => TrustedContext | undefined,
+  ): GovernedToolkit;
   /**
    * One-call helper: define a governed tool and return a ready-to-use Flue
    * `ToolDefinition` (equivalent to `defineTool(toFlueTool(defineGovernedTool(
@@ -435,6 +474,29 @@ export function createGovernedToolkit(
     ): GovernedToolkit =>
       build(typeof context === "function" ? context : () => context);
 
+    const withSignal = (
+      delivery: SignalDelivery,
+      toContext: (attributes: Record<string, string>) => TrustedContext | undefined,
+    ): GovernedToolkit => {
+      // Map once, at render: the attributes cannot change during a turn. Any
+      // failure becomes a resolver that refuses each call, which the pipeline
+      // records as a denial, rather than an error that breaks the render.
+      let bound: TrustedContext | undefined;
+      let failure: unknown;
+      try {
+        bound = delivery.kind === "signal" && delivery.attributes
+          ? toContext(delivery.attributes)
+          : undefined;
+      } catch (err) {
+        failure = err;
+      }
+      return build(() => {
+        if (failure !== undefined) throw failure;
+        if (!bound) throw new MissingContextError();
+        return bound;
+      });
+    };
+
     const tool = <S extends StandardSchemaV1, TResult = unknown>(
       spec: GovernedFlueToolSpec<S, TResult>,
     ): FlueToolDefinition => {
@@ -457,6 +519,7 @@ export function createGovernedToolkit(
     return {
       defineGovernedTool,
       withContext,
+      withSignal,
       tool,
       run: <T>(context: TrustedContext, fn: () => T) =>
         requireStore().run(context, fn),
@@ -468,17 +531,20 @@ export function createGovernedToolkit(
       spec: GovernedToolSpec<TArgs, TResult>,
     ): FlueCompatibleTool {
     // `authorize` is keyed to a declared anchor (caller or a trusted source),
-    // so there's no arg-only shape to reject. We only check that a referenced
-    // trusted source actually exists.
+    // so there's no arg-only shape to reject. A plain function is the caller
+    // anchor. We only check that a referenced trusted source actually exists.
+    const authorize = typeof spec.authorize === "function"
+      ? { anchor: "caller" as const, check: spec.authorize }
+      : spec.authorize;
     if (
-      spec.authorize &&
-      typeof spec.authorize.anchor === "object" &&
-      !(spec.authorize.anchor.trustedSource in (options.trustedSources ?? {}))
+      authorize &&
+      typeof authorize.anchor === "object" &&
+      !(authorize.anchor.trustedSource in (options.trustedSources ?? {}))
     ) {
       throw new GovernanceConfigError(
         spec.name,
         `authorize for "${spec.name}" references unknown trusted source ` +
-          `"${spec.authorize.anchor.trustedSource}". Register it in ` +
+          `"${authorize.anchor.trustedSource}". Register it in ` +
           "createGovernedToolkit({ trustedSources }).",
       );
     }
@@ -498,7 +564,7 @@ export function createGovernedToolkit(
       !spec.unsafeAllowUnauthorized &&
       (spec.kind ?? "scoped") === "scoped" &&
       Boolean(spec.scope) &&
-      !spec.authorize &&
+      !authorize &&
       (spec.requireRoles?.length ?? 0) === 0 &&
       !approvalGates;
 
@@ -522,7 +588,7 @@ export function createGovernedToolkit(
       } else {
         const gated =
           Boolean(spec.scope) ||
-          Boolean(spec.authorize) ||
+          Boolean(authorize) ||
           (spec.requireRoles?.length ?? 0) > 0 ||
           approvalGates;
         if (!gated) {
@@ -681,8 +747,8 @@ export function createGovernedToolkit(
         }
 
         // 5. Authorization, keyed to a declared trusted anchor.
-        if (spec.authorize) {
-          const a = spec.authorize;
+        if (authorize) {
+          const a = authorize;
           const ok =
             a.anchor === "caller"
               ? await a.check(args, execCtx)

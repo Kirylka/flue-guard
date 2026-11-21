@@ -42,7 +42,7 @@ arguments cannot be written at all.
 ## Not guaranteed, on purpose
 
 - **That your checks are right.** In
-  `caller((a, ctx) => accounts.ownedBy(a.accountId, ctx.actor.id))`, the
+  `authorize: (a, ctx) => accounts.ownedBy(a.accountId, ctx.actor.id)`, the
   ownership logic is yours. flue-guard guarantees it runs before the change
   and that its answer is logged. It cannot know whether the answer is correct.
 - **What your code does once it runs.** Checks run before the handler. They
